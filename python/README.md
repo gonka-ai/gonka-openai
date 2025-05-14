@@ -21,7 +21,7 @@ from gonka_openai import GonkaOpenAI
 
 # Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
 client = GonkaOpenAI(
-    api_key="your-openai-api-key",
+    api_key="mock-api-key",
     gonka_private_key="0x1234...",  # ECDSA private key for signing requests
     # Optional parameters:
     # gonka_address="cosmos1...",  # Override derived Cosmos address
@@ -30,7 +30,7 @@ client = GonkaOpenAI(
 
 # Use exactly like the original OpenAI client
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="Qwen/QwQ-32B",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
@@ -49,14 +49,14 @@ http_client = gonka_http_client(
 
 # Create an OpenAI client with the custom HTTP client
 client = OpenAI(
-    api_key="your-openai-api-key",
+    api_key="mock-api-key",
     base_url=gonka_base_url(),  # Use Gonka network endpoints
     http_client=http_client  # Use the custom HTTP client that signs requests
 )
 
 # Use normally - all requests will be dynamically signed and routed through Gonka
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="Qwen/QwQ-32B",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
@@ -81,13 +81,13 @@ Example with environment variables:
 from gonka_openai import GonkaOpenAI
 
 client = GonkaOpenAI(
-    api_key="your-openai-api-key",
+    api_key="mock-api-key",
     # No need to provide private_key, it will be read from environment
 )
 
 # Use normally
 response = client.chat.completions.create(
-    model="gpt-4o",
+    model="Qwen/QwQ-32B",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
@@ -106,7 +106,7 @@ def first_endpoint_strategy(endpoints):
     return endpoints[0]
 
 client = GonkaOpenAI(
-    api_key="your-openai-api-key",
+    api_key="mock-api-key",
     gonka_private_key="0x1234...",
     endpoint_selection_strategy=first_endpoint_strategy
 )

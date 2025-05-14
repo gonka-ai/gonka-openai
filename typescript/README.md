@@ -5,27 +5,7 @@ A TypeScript client for integrating with the Gonka network and OpenAI API.
 ## Installation
 
 ```bash
-npm install
-```
-
-## Building
-
-```bash
-npm run build
-```
-
-## Testing
-
-### Option 1: Running the MJS Test (Recommended)
-
-This test utilizes the pre-compiled JavaScript and properly handles environment variables:
-
-```bash
-# Test with mock responses (no real API calls)
-npm run test:ts
-
-# Test with real API calls
-npm run test:ts:real
+npm install gonka-openai
 ```
 
 ## Usage
@@ -39,7 +19,7 @@ import { GonkaOpenAI } from 'gonka-openai';
 
 // Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
 const client = new GonkaOpenAI({
-  apiKey: 'your-openai-api-key',
+  apiKey: 'mock-api-key',
   gonkaPrivateKey: '0x1234...', // ECDSA private key for signing requests
   // Optional parameters:
   // gonkaAddress: 'cosmos1...', // Override derived Cosmos address
@@ -48,7 +28,7 @@ const client = new GonkaOpenAI({
 
 // Use exactly like the original OpenAI client
 const response = await client.chat.completions.create({
-  model: 'gpt-4o',
+  model: 'Qwen/QwQ-32B',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```
@@ -66,14 +46,14 @@ const fetch = gonkaFetch({
 
 // Create an OpenAI client with the custom fetch function
 const client = new OpenAI({
-  apiKey: 'your-openai-api-key',
+  apiKey: 'mock-api-key',
   baseURL: gonkaBaseURL(), // Use Gonka network endpoints 
   fetch: fetch // Use the custom fetch function that signs requests
 });
 
 // Use normally - all requests will be dynamically signed and routed through Gonka
 const response = await client.chat.completions.create({
-  model: 'gpt-4o',
+  model: 'Qwen/QwQ-32B',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```
@@ -98,13 +78,13 @@ Example with environment variables:
 import { GonkaOpenAI } from 'gonka-openai';
 
 const client = new GonkaOpenAI({
-  apiKey: 'your-openai-api-key',
+  apiKey: 'mock-api-key',
   // No need to provide privateKey, it will be read from environment
 });
 
 // Use normally
 const response = await client.chat.completions.create({
-  model: 'gpt-4o',
+  model: 'Qwen/QwQ-32B',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```
@@ -119,7 +99,7 @@ You can provide a custom endpoint selection strategy:
 import { GonkaOpenAI } from 'gonka-openai';
 
 const client = new GonkaOpenAI({
-  apiKey: 'your-openai-api-key',
+  apiKey: 'mock-api-key',
   gonkaPrivateKey: '0x1234...',
   endpointSelectionStrategy: (endpoints) => {
     // Custom selection logic
