@@ -19,7 +19,6 @@ import { GonkaOpenAI } from 'gonka-openai';
 
 // Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
 const client = new GonkaOpenAI({
-  apiKey: 'mock-api-key',
   gonkaPrivateKey: '0x1234...', // ECDSA private key for signing requests
   endpoints: ['https://gonka1.example.com/v1'], // Gonka endpoints
   // Optional parameters:
@@ -46,7 +45,7 @@ const fetch = gonkaFetch({
 
 // Create an OpenAI client with the custom fetch function
 const client = new OpenAI({
-  apiKey: 'mock-api-key',
+  apiKey: 'mock-api-key', // OpenAI requires any key
   baseURL: gonkaBaseURL(endpoints: ['https://gonka1.example.com/v1']), // Use Gonka network endpoints 
   fetch: fetch // Use the custom fetch function that signs requests
 });

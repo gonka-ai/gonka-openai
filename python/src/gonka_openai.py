@@ -75,6 +75,10 @@ class GonkaOpenAI(OpenAI):
         
         print(f"base_url: {base_url}")
 
+        # Set default mock-api-key if no api_key is provided
+        if 'api_key' not in kwargs:
+            kwargs['api_key'] = "mock-api-key"
+
         # Initialize the base OpenAI client with our custom HTTP client and base URL
         super().__init__(
             base_url=base_url,

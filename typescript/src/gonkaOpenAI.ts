@@ -44,6 +44,11 @@ export class GonkaOpenAI extends OpenAI {
       baseURL,
     };
     
+    // Set default mock-api-key if no apiKey is provided
+    if (!openAIConfig.apiKey) {
+      openAIConfig.apiKey = "mock-api-key";
+    }
+    
     // Add the signing fetch function to the configuration
     (openAIConfig as any).fetch = signingFetch;
 
