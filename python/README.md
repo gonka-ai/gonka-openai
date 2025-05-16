@@ -23,9 +23,9 @@ from gonka_openai import GonkaOpenAI
 client = GonkaOpenAI(
     api_key="mock-api-key",
     gonka_private_key="0x1234...",  # ECDSA private key for signing requests
+    endpoints=["https://gonka1.example.com/v1"],  # Gonka endpoints
     # Optional parameters:
     # gonka_address="cosmos1...",  # Override derived Cosmos address
-    # endpoints=["https://gonka1.example.com", "https://gonka2.example.com"],  # Custom endpoints
 )
 
 # Use exactly like the original OpenAI client
@@ -50,7 +50,7 @@ http_client = gonka_http_client(
 # Create an OpenAI client with the custom HTTP client
 client = OpenAI(
     api_key="mock-api-key",
-    base_url=gonka_base_url(),  # Use Gonka network endpoints
+    base_url=gonka_base_url(endpoints=["https://gonka1.example.com/v1"]),  # Use Gonka network endpoints
     http_client=http_client  # Use the custom HTTP client that signs requests
 )
 
@@ -82,7 +82,7 @@ from gonka_openai import GonkaOpenAI
 
 client = GonkaOpenAI(
     api_key="mock-api-key",
-    # No need to provide private_key, it will be read from environment
+    # No need to provide private_key or endpoints, it will be read from environment
 )
 
 # Use normally

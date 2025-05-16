@@ -21,9 +21,9 @@ import { GonkaOpenAI } from 'gonka-openai';
 const client = new GonkaOpenAI({
   apiKey: 'mock-api-key',
   gonkaPrivateKey: '0x1234...', // ECDSA private key for signing requests
+  endpoints: ['https://gonka1.example.com/v1'], // Gonka endpoints
   // Optional parameters:
   // gonkaAddress: 'cosmos1...', // Override derived Cosmos address
-  // endpoints: ['https://gonka1.example.com', 'https://gonka2.example.com'], // Custom endpoints
 });
 
 // Use exactly like the original OpenAI client
@@ -47,7 +47,7 @@ const fetch = gonkaFetch({
 // Create an OpenAI client with the custom fetch function
 const client = new OpenAI({
   apiKey: 'mock-api-key',
-  baseURL: gonkaBaseURL(), // Use Gonka network endpoints 
+  baseURL: gonkaBaseURL(endpoints: ['https://gonka1.example.com/v1']), // Use Gonka network endpoints 
   fetch: fetch // Use the custom fetch function that signs requests
 });
 
@@ -73,13 +73,13 @@ Example with environment variables:
 ```typescript
 // Set in your environment:
 // GONKA_PRIVATE_KEY=0x1234...
-// GONKA_ENDPOINTS=https://gonka1.example.com,https://gonka2.example.com
+// GONKA_ENDPOINTS=https://gonka1.example.com/v1,https://gonka2.example.com/v1
 
 import { GonkaOpenAI } from 'gonka-openai';
 
 const client = new GonkaOpenAI({
   apiKey: 'mock-api-key',
-  // No need to provide privateKey, it will be read from environment
+  // No need to provide privateKey and endpoints, it will be read from environment
 });
 
 // Use normally
