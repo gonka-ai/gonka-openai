@@ -14,7 +14,7 @@ This project provides modified OpenAI clients for various programming languages 
 
 - [TypeScript](./typescript/README.md)
 - [Python](./python/README.md)
-- [Go](./go/README.md) (coming soon)
+- [Go](./go/README.md)
 - [Rust](./rust/README.md) (coming soon)
 - [Java](./java/README.md) (coming soon)
 
