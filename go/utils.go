@@ -7,25 +7,36 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/btcsuite/btcd/btcutil/bech32"
 	"github.com/ethereum/go-ethereum/crypto"
 	"golang.org/x/crypto/ripemd160" //nolint:SA1019 // RIPEMD-160 is required for Cosmos address generation, standard despite deprecation.
 )
 
-// GonkaBaseURL returns a random endpoint from the provided list or environment.
-func GonkaBaseURL(endpoints []string) string {
-	eps := make([]string, 0)
+// GonkaBaseURL returns a random endpoint URL from the provided list or environment.
+func GonkaBaseURL(endpoints []Endpoint) string {
+	eps := make([]Endpoint, 0)
 	if len(endpoints) > 0 {
 		eps = endpoints
 	} else if env := os.Getenv(EnvEndpoints); env != "" {
+		// Parse environment endpoints in format "URL;ADDRESS,URL;ADDRESS"
 		for _, e := range strings.Split(env, ",") {
-			eps = append(eps, strings.TrimSpace(e))
+			parts := strings.Split(strings.TrimSpace(e), ";")
+			if len(parts) == 2 {
+				// Format is "URL;ADDRESS"
+				url := strings.TrimSpace(parts[0])
+				address := strings.TrimSpace(parts[1])
+				eps = append(eps, Endpoint{URL: url, Address: address})
+			}
+			// No backward compatibility: if no address is provided, the endpoint is ignored
 		}
 	} else {
 		eps = DefaultEndpoints
@@ -34,22 +45,30 @@ func GonkaBaseURL(endpoints []string) string {
 		return ""
 	}
 	if len(eps) == 1 {
-		return eps[0]
+		return eps[0].URL
 	}
 	n, err := crand.Int(crand.Reader, big.NewInt(int64(len(eps))))
 	if err != nil {
-		return eps[0]
+		return eps[0].URL
 	}
-	return eps[int(n.Int64())]
+	return eps[int(n.Int64())].URL
 }
 
 // CustomEndpointSelection allows providing custom strategy.
-func CustomEndpointSelection(f func([]string) string, endpoints []string) string {
+func CustomEndpointSelection(f func([]Endpoint) string, endpoints []Endpoint) string {
 	eps := endpoints
 	if len(eps) == 0 {
 		if env := os.Getenv(EnvEndpoints); env != "" {
+			// Parse environment endpoints in format "URL;ADDRESS,URL;ADDRESS"
 			for _, e := range strings.Split(env, ",") {
-				eps = append(eps, strings.TrimSpace(e))
+				parts := strings.Split(strings.TrimSpace(e), ";")
+				if len(parts) == 2 {
+					// Format is "URL;ADDRESS"
+					url := strings.TrimSpace(parts[0])
+					address := strings.TrimSpace(parts[1])
+					eps = append(eps, Endpoint{URL: url, Address: address})
+				}
+				// No backward compatibility: if no address is provided, the endpoint is ignored
 			}
 		} else {
 			eps = DefaultEndpoints
@@ -111,35 +130,103 @@ func GonkaAddress(privateKeyHex string) (string, error) {
 	return bech32.Encode(prefix, five)
 }
 
+// SignatureComponents contains the components needed for signature generation
+type SignatureComponents struct {
+	Payload         string
+	Timestamp       int64
+	TransferAddress string
+}
+
+// getSignatureBytes creates the message payload for signing according to the new method
+func getSignatureBytes(components SignatureComponents) []byte {
+	// Create message payload by concatenating components
+	messagePayload := []byte(components.Payload)
+	if components.Timestamp > 0 {
+		messagePayload = append(messagePayload, []byte(strconv.FormatInt(components.Timestamp, 10))...)
+	}
+	messagePayload = append(messagePayload, []byte(components.TransferAddress)...)
+	return messagePayload
+}
+
 type signingRoundTripper struct {
 	rt         http.RoundTripper
 	privateKey string
 	address    string
+	endpoints  []Endpoint
 }
 
 func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Generate timestamp in nanoseconds
+	timestamp := time.Now().UnixNano()
+
+	// Determine the appropriate transfer address for this request
+	var transferAddress string
+
+	// Extract the base URL from the request URL
+	if req.URL != nil {
+		baseURL := req.URL.Scheme + "://" + req.URL.Host
+
+		// Find the matching endpoint
+		for _, endpoint := range s.endpoints {
+			if endpoint.URL == baseURL {
+				transferAddress = endpoint.Address
+				break
+			}
+		}
+
+		// If no matching endpoint found, we can't proceed
+		if transferAddress == "" {
+			return nil, fmt.Errorf("no transfer address found for endpoint: %s", baseURL)
+		}
+	} else {
+		return nil, fmt.Errorf("request URL is nil")
+	}
+
+	var payload string
+	var dataToSign []byte
+
 	if req.Body != nil {
 		data, err := io.ReadAll(req.Body)
 		if err == nil {
-			sig, err := GonkaSignature(data, s.privateKey)
+			payload = string(data)
+			components := SignatureComponents{
+				Payload:         payload,
+				Timestamp:       timestamp,
+				TransferAddress: transferAddress,
+			}
+			dataToSign = getSignatureBytes(components)
+
+			sig, err := GonkaSignature(dataToSign, s.privateKey)
 			if err == nil {
 				req.Header.Set("Authorization", sig)
 			}
 		}
 		req.Body = io.NopCloser(bytes.NewReader(data))
 	} else {
-		sig, err := GonkaSignature([]byte{}, s.privateKey)
+		components := SignatureComponents{
+			Payload:         "",
+			Timestamp:       timestamp,
+			TransferAddress: transferAddress,
+		}
+		dataToSign = getSignatureBytes(components)
+
+		sig, err := GonkaSignature(dataToSign, s.privateKey)
 		if err == nil {
 			req.Header.Set("Authorization", sig)
 		}
 	}
+
+	// Set headers
 	req.Header.Set("X-Requester-Address", s.address)
+	req.Header.Set("X-Timestamp", strconv.FormatInt(timestamp, 10))
+
 	return s.rt.RoundTrip(req)
 }
 
 type HTTPClientOptions struct {
 	PrivateKey string
 	Address    string
+	Endpoints  []Endpoint
 	Client     *http.Client
 }
 
@@ -158,6 +245,11 @@ func GonkaHTTPClient(opts HTTPClientOptions) *http.Client {
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
-	opts.Client.Transport = signingRoundTripper{rt: rt, privateKey: opts.PrivateKey, address: opts.Address}
+	opts.Client.Transport = signingRoundTripper{
+		rt:         rt,
+		privateKey: opts.PrivateKey,
+		address:    opts.Address,
+		endpoints:  opts.Endpoints,
+	}
 	return opts.Client
 }

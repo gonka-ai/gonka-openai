@@ -11,8 +11,8 @@ const (
 const GonkaChainID = "gonka-testnet-3"
 
 // Default endpoints if none are provided
-var DefaultEndpoints = []string{
-	"https://api.gonka.testnet.example.com",
-	"https://api2.gonka.testnet.example.com",
-	"https://api3.gonka.testnet.example.com",
+var DefaultEndpoints = []Endpoint{
+	{URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
+	{URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
+	{URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
 }

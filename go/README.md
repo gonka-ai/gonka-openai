@@ -26,7 +26,10 @@ func main() {
     // Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
     client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
         GonkaPrivateKey: "0x1234...", // ECDSA private key for signing requests
-        Endpoints: []string{"https://gonka1.example.com/v1"}, // Gonka endpoints
+        Endpoints: []gonkaopenai.Endpoint{
+            {URL: "https://gonka1.example.com/v1", Address: "transfer_address_1"},
+            {URL: "https://gonka2.example.com/v1", Address: "transfer_address_2"},
+        }, // List of endpoints with their transfer addresses
         // Optional parameters:
         // GonkaAddress: "cosmos1...", // Override derived Cosmos address
     })
@@ -61,13 +64,20 @@ import (
 )
 
 func main() {
+    // Define endpoints with their transfer addresses
+    endpoints := []gonkaopenai.Endpoint{
+        {URL: "https://gonka1.example.com/v1", Address: "transfer_address_1"},
+        {URL: "https://gonka2.example.com/v1", Address: "transfer_address_2"},
+    }
+
     httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
         PrivateKey: "0x1234...",
+        Endpoints:  endpoints, // List of endpoints with their transfer addresses
     })
 
     client := openai.NewClient(
         option.WithAPIKey("mock-api-key"), // OpenAI requires any key
-        option.WithBaseURL(gonkaopenai.GonkaBaseURL([]string{"https://gonka1.example.com/v1"})),
+        option.WithBaseURL(gonkaopenai.GonkaBaseURL(endpoints)), // Randomly selects an endpoint URL
         option.WithHTTPClient(httpClient),
     )
 
@@ -93,7 +103,7 @@ Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
 - `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
-- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints
+- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their transfer addresses in the format "URL;ADDRESS,URL;ADDRESS" (e.g., "https://myendpoint.com;gonka1fgjkdsafjalf,https://anotherendpoint.com;gonka2abcdefghijk")
 
 ## Advanced Configuration
 
@@ -104,11 +114,45 @@ You can provide a custom endpoint selection strategy:
 ```go
 client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
     GonkaPrivateKey: "0x1234...",
-    EndpointSelectionStrategy: func(endpoints []string) string {
-        return endpoints[0] // Always select the first
+    Endpoints: []gonkaopenai.Endpoint{
+        {URL: "https://gonka1.example.com/v1", Address: "transfer_address_1"},
+        {URL: "https://gonka2.example.com/v1", Address: "transfer_address_2"},
+    },
+    EndpointSelectionStrategy: func(endpoints []gonkaopenai.Endpoint) string {
+        return endpoints[0].URL // Always select the first endpoint's URL
     },
 })
 ```
+
+### Endpoint Configuration
+
+Each endpoint must have an associated transfer address for signature generation. The `Endpoint` type pairs a URL with its transfer address:
+
+```go
+// Define endpoints with their transfer addresses
+endpoints := []gonkaopenai.Endpoint{
+    {URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
+    {URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
+    {URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
+}
+
+// Use with NewGonkaOpenAI
+client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
+    GonkaPrivateKey: "0x1234...",
+    Endpoints:       endpoints,
+})
+```
+
+Or when using the GonkaHTTPClient directly:
+
+```go
+httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+    PrivateKey: "0x1234...",
+    Endpoints:  endpoints,
+})
+```
+
+This approach ensures that each request is signed with the appropriate transfer address for the endpoint it's targeting.
 
 ## Building from Source
 

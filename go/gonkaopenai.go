@@ -11,13 +11,19 @@ import (
 	"github.com/openai/openai-go/option"
 )
 
+// Endpoint represents a Gonka API endpoint with its associated transfer address
+type Endpoint struct {
+	URL     string
+	Address string
+}
+
 // Options for creating a GonkaOpenAI client.
 type Options struct {
 	APIKey                    string
 	GonkaPrivateKey           string
 	GonkaAddress              string
-	Endpoints                 []string
-	EndpointSelectionStrategy func([]string) string
+	Endpoints                 []Endpoint // List of endpoints with their transfer addresses
+	EndpointSelectionStrategy func([]Endpoint) string
 	HTTPClient                *http.Client
 	OrgID                     string
 }
@@ -37,6 +43,18 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	}
 	if privateKey == "" {
 		return nil, fmt.Errorf("private key must be provided via opts or %s", EnvPrivateKey)
+	}
+
+	// Validate that we have endpoints with addresses
+	if len(opts.Endpoints) == 0 {
+		return nil, fmt.Errorf("at least one endpoint with address must be provided")
+	}
+
+	// Validate that each endpoint has a non-empty address
+	for _, endpoint := range opts.Endpoints {
+		if endpoint.Address == "" {
+			return nil, fmt.Errorf("endpoint %s has an empty address, all endpoints must have an address", endpoint.URL)
+		}
 	}
 
 	baseURL := ""
@@ -67,6 +85,7 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	httpClient := GonkaHTTPClient(HTTPClientOptions{
 		PrivateKey: privateKey,
 		Address:    address,
+		Endpoints:  opts.Endpoints,
 		Client:     opts.HTTPClient,
 	})
 
