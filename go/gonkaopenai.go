@@ -47,7 +47,10 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 
 	// Validate that we have endpoints with addresses
 	if len(opts.Endpoints) == 0 {
-		return nil, fmt.Errorf("at least one endpoint with address must be provided")
+	    opts.Endpoints = GetEndpointsFromEnv()
+	    if len(opts.Endpoints) == 0 {
+    		return nil, fmt.Errorf("at least one endpoint with address must be provided")
+	    }
 	}
 
 	// Validate that each endpoint has a non-empty address

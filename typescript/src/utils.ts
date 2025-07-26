@@ -26,8 +26,6 @@ export const gonkaBaseURL = (endpoints?: GonkaEndpoint[]): GonkaEndpoint => {
           throw new Error(`Invalid endpoint format: ${e}. Expected format: "url;transferAddress"`);
         }
 
-        console.log(`URL: ${parts[0]}, Address: ${parts[1]}`);
-
         return {
           url: parts[0],
           transferAddress: parts[1]
@@ -283,7 +281,6 @@ export const gonkaFetch = (
     
     // Generate a unique timestamp in nanoseconds
     const timestamp = getNanoTimestamp();
-    console.log('Timestampn:', timestamp);
     // Add the X-Timestamp header
     requestInit.headers.set('X-Timestamp', timestamp.toString());
     

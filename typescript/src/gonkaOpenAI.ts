@@ -19,7 +19,6 @@ export class GonkaOpenAI extends OpenAI {
    * @param options Options for the client
    */
   constructor(options: GonkaOpenAIOptions) {
-    console.log('GonkaOpenAI constructor')
     // Get private key from options or environment
     const privateKey = options.gonkaPrivateKey || process.env[ENV.PRIVATE_KEY];
     if (!privateKey) {
