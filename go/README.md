@@ -168,7 +168,7 @@ A simple example program is provided in `test.go`:
 
 ```bash
 cd go
-go run ./test.go
+go run ./example_test.go
 ```
 
 ## License

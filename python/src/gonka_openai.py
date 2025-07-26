@@ -7,7 +7,8 @@ from typing import Dict, List, Optional, Any, Union
 
 from openai import OpenAI
 
-from .utils import gonka_base_url, gonka_address as utils_gonka_address, custom_endpoint_selection, gonka_http_client
+from .utils import gonka_base_url, gonka_address as utils_gonka_address, custom_endpoint_selection, gonka_http_client, \
+    Endpoint
 from .constants import ENV, GONKA_CHAIN_ID
 
 class GonkaOpenAI(OpenAI):
@@ -20,7 +21,7 @@ class GonkaOpenAI(OpenAI):
         *,
         gonka_private_key: Optional[str] = None,
         gonka_address: Optional[str] = None,
-        endpoints: Optional[List[str]] = None,
+        endpoints: Optional[List[Endpoint]] = None,
         endpoint_selection_strategy: Optional[callable] = None,
         **kwargs
     ):
@@ -44,10 +45,10 @@ class GonkaOpenAI(OpenAI):
         # Determine the base URL
         if endpoint_selection_strategy:
             # Use custom endpoint selection strategy if provided
-            base_url = custom_endpoint_selection(endpoint_selection_strategy, endpoints)
+            base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, endpoints)
         else:
             # Default to random endpoint selection
-            base_url = gonka_base_url(endpoints)
+            base_endpoint = gonka_base_url(endpoints)
         
         # Save the private key for later use
         self._private_key = private_key
@@ -70,10 +71,11 @@ class GonkaOpenAI(OpenAI):
         http_client = gonka_http_client(
             private_key=private_key,
             address=self._gonka_address,
-            http_client=kwargs.pop('http_client', None)
+            http_client=kwargs.pop('http_client', None),
+            transfer_address=base_endpoint.address
         )
         
-        print(f"base_url: {base_url}")
+        print(f"base_url: {base_endpoint.url}")
 
         # Set default mock-api-key if no api_key is provided
         if 'api_key' not in kwargs:
@@ -81,7 +83,7 @@ class GonkaOpenAI(OpenAI):
 
         # Initialize the base OpenAI client with our custom HTTP client and base URL
         super().__init__(
-            base_url=base_url,
+            base_url=base_endpoint.url,
             http_client=http_client,
             **kwargs
         )

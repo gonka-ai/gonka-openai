@@ -77,7 +77,26 @@ class Endpoint:
 logger = logging.getLogger("gonka")
 logging.basicConfig(level=logging.INFO)
 
-def gonka_base_url(endpoints: Optional[List[Union[str, Endpoint]]] = None) -> Endpoint:
+def get_endpoints_from_env_or_default() -> List[Endpoint]:
+    """
+    Get a list of parsed endpoints from the environment variable or default values.
+
+    Returns:
+        List of Endpoint objects
+
+    Raises:
+        ValueError: If no valid endpoints with transfer addresses are available
+    """
+    env_endpoints = os.environ.get(ENV.ENDPOINTS)
+    if env_endpoints:
+        # Parse endpoints from environment variable
+        return [Endpoint.parse(e.strip()) for e in env_endpoints.split(',')]
+    else:
+        # Use default endpoints which must include transfer addresses
+        return [Endpoint.parse(endpoint) for endpoint in DEFAULT_ENDPOINTS]
+
+
+def gonka_base_url(endpoints: Optional[List[Endpoint]] = None) -> Endpoint:
     """
     Get a random endpoint from the list of available endpoints.
     
@@ -91,38 +110,14 @@ def gonka_base_url(endpoints: Optional[List[Union[str, Endpoint]]] = None) -> En
         ValueError: If no valid endpoints with transfer addresses are available
     """
     # Try to get endpoints from arguments, environment, or default to hardcoded values
-    endpoint_list = endpoints or []
-    
-    if not endpoint_list:
-        env_endpoints = os.environ.get(ENV.ENDPOINTS)
-        if env_endpoints:
-            # Parse endpoints from environment variable
-            endpoint_list = [Endpoint.parse(e.strip()) for e in env_endpoints.split(',')]
-        else:
-            # Use default endpoints which must include transfer addresses
-            endpoint_list = [Endpoint.parse(endpoint) for endpoint in DEFAULT_ENDPOINTS]
-    
-    # Convert any string endpoints to Endpoint objects
-    parsed_endpoints = []
-    for endpoint in endpoint_list:
-        if isinstance(endpoint, str):
-            parsed_endpoints.append(Endpoint.parse(endpoint))
-        else:
-            # Validate that the Endpoint object has a non-empty address
-            if not endpoint.address:
-                raise ValueError(f"Endpoint {endpoint.url} is missing a required transfer address")
-            parsed_endpoints.append(endpoint)
-    
-    if not parsed_endpoints:
-        raise ValueError("No valid endpoints with transfer addresses are available")
-    
+    endpoint_list = endpoints or get_endpoints_from_env_or_default()
     # Select a random endpoint
-    return random.choice(parsed_endpoints)
+    return random.choice(endpoint_list)
 
 
 def custom_endpoint_selection(
     endpoint_selection_strategy: Callable[[List[Endpoint]], Endpoint],
-    endpoints: Optional[List[Union[str, Endpoint]]] = None
+    endpoints: Optional[List[Endpoint]] = None
 ) -> Endpoint:
     """
     Custom endpoint selection strategy.
@@ -138,33 +133,9 @@ def custom_endpoint_selection(
         ValueError: If no valid endpoints with transfer addresses are available
     """
     # Get the list of endpoints
-    endpoint_list = endpoints or []
-    
-    if not endpoint_list:
-        env_endpoints = os.environ.get(ENV.ENDPOINTS)
-        if env_endpoints:
-            # Parse endpoints from environment variable
-            endpoint_list = [Endpoint.parse(e.strip()) for e in env_endpoints.split(',')]
-        else:
-            # Use default endpoints which must include transfer addresses
-            endpoint_list = [Endpoint.parse(endpoint) for endpoint in DEFAULT_ENDPOINTS]
-    
-    # Convert any string endpoints to Endpoint objects
-    parsed_endpoints = []
-    for endpoint in endpoint_list:
-        if isinstance(endpoint, str):
-            parsed_endpoints.append(Endpoint.parse(endpoint))
-        else:
-            # Validate that the Endpoint object has a non-empty address
-            if not endpoint.address:
-                raise ValueError(f"Endpoint {endpoint.url} is missing a required transfer address")
-            parsed_endpoints.append(endpoint)
-    
-    if not parsed_endpoints:
-        raise ValueError("No valid endpoints with transfer addresses are available")
-    
-    # Use the provided strategy to select an endpoint
-    return endpoint_selection_strategy(parsed_endpoints)
+    endpoint_list = endpoints or get_endpoints_from_env_or_default()
+
+    return endpoint_selection_strategy(endpoint_list)
 
 
 def gonka_signature(body: Any, private_key_hex: str, timestamp: int, transfer_address: str) -> str:
@@ -217,7 +188,7 @@ def gonka_signature(body: Any, private_key_hex: str, timestamp: int, transfer_ad
     message_bytes = payload_bytes
     message_bytes += str(timestamp).encode('utf-8')
     message_bytes += transfer_address.encode('utf-8')
-    
+
     # Sign the message with deterministic ECDSA using our custom encoder
     signature = signing_key.sign_deterministic(
         message_bytes,

@@ -11,6 +11,7 @@ import (
 	"github.com/openai/openai-go/option"
 )
 
+var defaultModel = "Qwen/QwQ-32B" // Default model for testing
 func TestExampleUsage(t *testing.T) {
 	err := godotenv.Load()
 	if err != nil {
@@ -27,11 +28,12 @@ func TestExampleUsage(t *testing.T) {
 
 	// Create a list of endpoints with their transfer addresses
 	// In a real application, these would be loaded from configuration or environment variables
-	endpoints := []gonkaopenai.Endpoint{
-		{URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
-		{URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
-		{URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
-	}
+	//endpoints := []gonkaopenai.Endpoint{
+	//	{URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
+	//	{URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
+	//	{URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
+	//}
+	endpoints := gonkaopenai.GetEndpointsFromEnv()
 
 	// Get a random endpoint URL for the base URL
 	baseURL := gonkaopenai.GonkaBaseURL(endpoints)
@@ -53,7 +55,7 @@ func TestExampleUsage(t *testing.T) {
 
 	t.Log("\nSending request...")
 	resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model: "Qwen/QwQ-32B", // Model as a string, consistent with gonkaopenai.go
+		Model: defaultModel, // Model as a string, consistent with gonkaopenai.go
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("Hello! Tell me a short joke for a test."), // Using UserMessage helper
 		},
@@ -106,11 +108,12 @@ func TestDirectOpenAIUsage(t *testing.T) {
 
 	// 3. Create a list of endpoints with their transfer addresses
 	// In a real application, these would be loaded from configuration or environment variables
-	endpoints := []gonkaopenai.Endpoint{
-		{URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
-		{URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
-		{URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
-	}
+	//endpoints := []gonkaopenai.Endpoint{
+	//	{URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
+	//	{URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
+	//	{URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
+	//}
+	endpoints := gonkaopenai.GetEndpointsFromEnv()
 
 	// Get a random endpoint URL for the base URL
 	baseURL := gonkaopenai.GonkaBaseURL(endpoints)
@@ -146,7 +149,7 @@ func TestDirectOpenAIUsage(t *testing.T) {
 
 	t.Log("Sending request with manually configured Gonka-like client...")
 	resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-		Model: "Qwen/QwQ-32B", // Using the same model as TestExampleUsage
+		Model: defaultModel, // Using the same model as TestExampleUsage
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.UserMessage("Hello Gonka-configured client! Tell me a very short story."),
 		},

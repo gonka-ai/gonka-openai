@@ -26,20 +26,8 @@ func GonkaBaseURL(endpoints []Endpoint) string {
 	eps := make([]Endpoint, 0)
 	if len(endpoints) > 0 {
 		eps = endpoints
-	} else if env := os.Getenv(EnvEndpoints); env != "" {
-		// Parse environment endpoints in format "URL;ADDRESS,URL;ADDRESS"
-		for _, e := range strings.Split(env, ",") {
-			parts := strings.Split(strings.TrimSpace(e), ";")
-			if len(parts) == 2 {
-				// Format is "URL;ADDRESS"
-				url := strings.TrimSpace(parts[0])
-				address := strings.TrimSpace(parts[1])
-				eps = append(eps, Endpoint{URL: url, Address: address})
-			}
-			// No backward compatibility: if no address is provided, the endpoint is ignored
-		}
 	} else {
-		eps = DefaultEndpoints
+		eps = GetEndpointsFromEnv()
 	}
 	if len(eps) == 0 {
 		return ""
@@ -54,25 +42,31 @@ func GonkaBaseURL(endpoints []Endpoint) string {
 	return eps[int(n.Int64())].URL
 }
 
+func GetEndpointsFromEnv() []Endpoint {
+	env := os.Getenv(EnvEndpoints)
+	if env == "" {
+		return DefaultEndpoints
+	}
+	eps := make([]Endpoint, 0)
+	// Parse environment endpoints in format "URL;ADDRESS,URL;ADDRESS"
+	for _, e := range strings.Split(env, ",") {
+		parts := strings.Split(strings.TrimSpace(e), ";")
+		if len(parts) == 2 {
+			// Format is "URL;ADDRESS"
+			url := strings.TrimSpace(parts[0])
+			address := strings.TrimSpace(parts[1])
+			eps = append(eps, Endpoint{URL: url, Address: address})
+		}
+		// No backward compatibility: if no address is provided, the endpoint is ignored
+	}
+	return eps
+}
+
 // CustomEndpointSelection allows providing custom strategy.
 func CustomEndpointSelection(f func([]Endpoint) string, endpoints []Endpoint) string {
 	eps := endpoints
 	if len(eps) == 0 {
-		if env := os.Getenv(EnvEndpoints); env != "" {
-			// Parse environment endpoints in format "URL;ADDRESS,URL;ADDRESS"
-			for _, e := range strings.Split(env, ",") {
-				parts := strings.Split(strings.TrimSpace(e), ";")
-				if len(parts) == 2 {
-					// Format is "URL;ADDRESS"
-					url := strings.TrimSpace(parts[0])
-					address := strings.TrimSpace(parts[1])
-					eps = append(eps, Endpoint{URL: url, Address: address})
-				}
-				// No backward compatibility: if no address is provided, the endpoint is ignored
-			}
-		} else {
-			eps = DefaultEndpoints
-		}
+		eps = GetEndpointsFromEnv()
 	}
 	return f(eps)
 }
@@ -148,6 +142,16 @@ func getSignatureBytes(components SignatureComponents) []byte {
 	return messagePayload
 }
 
+// SignComponentsWithKey combines getSignatureBytes and GonkaSignature to create a signature
+// from SignatureComponents using the provided private key.
+func SignComponentsWithKey(components SignatureComponents, privateKeyHex string) (string, error) {
+	// Get the bytes to sign from the components
+	dataToSign := getSignatureBytes(components)
+
+	// Sign the data with the private key
+	return GonkaSignature(dataToSign, privateKeyHex)
+}
+
 type signingRoundTripper struct {
 	rt         http.RoundTripper
 	privateKey string
@@ -168,7 +172,7 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 
 		// Find the matching endpoint
 		for _, endpoint := range s.endpoints {
-			if endpoint.URL == baseURL {
+			if strings.HasPrefix(endpoint.URL, baseURL) {
 				transferAddress = endpoint.Address
 				break
 			}
@@ -183,7 +187,6 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 	}
 
 	var payload string
-	var dataToSign []byte
 
 	if req.Body != nil {
 		data, err := io.ReadAll(req.Body)
@@ -194,9 +197,8 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 				Timestamp:       timestamp,
 				TransferAddress: transferAddress,
 			}
-			dataToSign = getSignatureBytes(components)
 
-			sig, err := GonkaSignature(dataToSign, s.privateKey)
+			sig, err := SignComponentsWithKey(components, s.privateKey)
 			if err == nil {
 				req.Header.Set("Authorization", sig)
 			}
@@ -208,9 +210,8 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 			Timestamp:       timestamp,
 			TransferAddress: transferAddress,
 		}
-		dataToSign = getSignatureBytes(components)
 
-		sig, err := GonkaSignature(dataToSign, s.privateKey)
+		sig, err := SignComponentsWithKey(components, s.privateKey)
 		if err == nil {
 			req.Header.Set("Authorization", sig)
 		}

@@ -3,6 +3,7 @@ import { GonkaOpenAI, gonkaBaseURL, gonkaFetch } from './dist/index.js';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
+let defaultModel = 'unsloth/llama-3-8b-Instruct';
 
 // Check for required environment variables
 const requiredEnvVars = ['GONKA_PRIVATE_KEY'];
@@ -67,7 +68,7 @@ if (!USE_REAL_REQUESTS) {
         id: 'mock-completion-id',
         object: 'chat.completion',
         created: Date.now(),
-        model: 'Qwen/QwQ-32B',
+        model: defaultModel,
         choices: [
           {
             message: {
@@ -86,8 +87,11 @@ if (!USE_REAL_REQUESTS) {
 const run = async () => {
   try {
     console.log('\n------ Test Environment ------');
-    const baseUrl = gonkaBaseURL();
-    console.log('Using Gonka Base URL:', baseUrl);
+    const selectedEndpoint = gonkaBaseURL();
+    console.log('Using Gonka Endpoint:', {
+      url: selectedEndpoint.url,
+      transferAddress: selectedEndpoint.transferAddress
+    });
     
     if (USE_REAL_REQUESTS) {
       console.log("Using REAL HTTP requests - this will make actual API calls!");
@@ -105,7 +109,7 @@ const run = async () => {
     // Make a chat completion request
     console.log('\nSending first request...');
     const chatResponse = await gonkaClient.chat.completions.create({
-      model: 'Qwen/QwQ-32B',
+      model: defaultModel,
       messages: [{ role: 'user', content: 'Hello! Tell me a short joke.' }],
     });
     
@@ -123,14 +127,14 @@ const run = async () => {
     // Create a standard OpenAI client with our custom fetch
     const openaiClient = new OpenAI({
       apiKey: 'mock-api-key', // This can be any string when using Gonka
-      baseURL: baseUrl,
+      baseURL: selectedEndpoint.url, // Use the URL property from the endpoint
       fetch: customFetch
     });
     
     // Make a request with the standard client (will be signed by our custom fetch)
     console.log('\nSending request with standard client + custom fetch...');
     const standardResponse = await openaiClient.chat.completions.create({
-      model: 'Qwen/QwQ-32B',
+      model: defaultModel,
       messages: [{ role: 'user', content: 'What is the capital of France?' }],
     });
     

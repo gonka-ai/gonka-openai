@@ -18,20 +18,28 @@ There are two ways to use this library:
 
 ```python
 from gonka_openai import GonkaOpenAI
+from gonka_openai.utils import Endpoint
+
+# Create endpoints directly
+endpoints = [
+    Endpoint(url="https://api.gonka.testnet.example.com", address="gonka1transferaddress"),
+    Endpoint(url="https://api2.gonka.testnet.example.com", address="gonka2transferaddress")
+]
 
 # Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
 client = GonkaOpenAI(
+    api_key="mock-api-key",  # OpenAI requires any key, defaults to "mock-api-key" if not provided
     gonka_private_key="0x1234...",  # ECDSA private key for signing requests
-    endpoints=["https://gonka1.example.com/v1;gonka1transferaddress"],  # Gonka endpoints with transfer addresses (Cosmos address of the provider)
-    # Optional parameter:
+    endpoints=endpoints,  # Pass in the endpoints directly
+    # Optional parameters:
     # gonka_address="cosmos1...",  # Override derived Cosmos address
-    transfer_address="gonka1...",  # Required: Transfer address (Cosmos address of the provider) - will override address from endpoint
+    # http_client=custom_client,  # Optional custom HTTP client
 )
 
 # Use exactly like the original OpenAI client
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
-    messages=[{"role": "user", "content": "Hello!"}],
+    model="unsloth/llama-3-8b-Instruct",
+    messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
 )
 ```
 
@@ -39,26 +47,35 @@ response = client.chat.completions.create(
 
 ```python
 from openai import OpenAI
-from gonka_openai import gonka_base_url, gonka_http_client
+from gonka_openai import gonka_http_client
+from gonka_openai.utils import Endpoint
+
+# Create an endpoint directly
+endpoint = Endpoint(
+    url="https://api.gonka.testnet.example.com",
+    address="gonka1transferaddress"
+)
 
 # Create a custom HTTP client for Gonka with your private key
 http_client = gonka_http_client(
     private_key="0x1234...",  # Your private key
-    address="cosmos1...",  # Optional address, will derive from private key if not provided
-    transfer_address="gonka1..."  # Required: Transfer address (Cosmos address of the provider) - will use from endpoint if provided
+    # Optional parameters:
+    # address="cosmos1...",  # Optional address, will derive from private key if not provided
+    # http_client=custom_client,  # Optional custom HTTP client
+    transfer_address=endpoint.address  # Transfer address from the endpoint
 )
 
 # Create an OpenAI client with the custom HTTP client
 client = OpenAI(
-    api_key="mock-api-key", # OpenAI requires any key
-    base_url=gonka_base_url(endpoints=["https://gonka1.example.com/v1;gonka1transferaddress"]).url,  # Use Gonka network endpoints
+    api_key="mock-api-key",  # OpenAI requires any key
+    base_url=endpoint.url,  # Use the URL from the endpoint
     http_client=http_client  # Use the custom HTTP client that signs requests
 )
 
 # Use normally - all requests will be dynamically signed and routed through Gonka
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
-    messages=[{"role": "user", "content": "Hello!"}],
+    model="unsloth/llama-3-8b-Instruct",
+    messages=[{"role": "user", "content": "What is the capital of France?"}],
 )
 ```
 
@@ -101,6 +118,13 @@ You can provide a custom endpoint selection strategy:
 
 ```python
 from gonka_openai import GonkaOpenAI
+from gonka_openai.utils import Endpoint
+
+# Create endpoints directly
+endpoints = [
+    Endpoint(url="https://api.gonka.testnet.example.com", address="gonka1transferaddress"),
+    Endpoint(url="https://api2.gonka.testnet.example.com", address="gonka2transferaddress")
+]
 
 def first_endpoint_strategy(endpoints):
     """Always select the first endpoint."""
@@ -109,7 +133,14 @@ def first_endpoint_strategy(endpoints):
 client = GonkaOpenAI(
     api_key="mock-api-key",
     gonka_private_key="0x1234...",
+    endpoints=endpoints,
     endpoint_selection_strategy=first_endpoint_strategy
+)
+
+# Use normally
+response = client.chat.completions.create(
+    model="unsloth/llama-3-8b-Instruct",
+    messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
 )
 ```
 

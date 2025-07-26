@@ -1,9 +1,24 @@
 import { ClientOptions } from 'openai';
 
 /**
+ * Endpoint object with URL and TransferAddress
+ */
+export interface GonkaEndpoint {
+  /**
+   * URL of the endpoint
+   */
+  url: string;
+  
+  /**
+   * Cosmos address of the endpoint provider
+   */
+  transferAddress: string;
+}
+
+/**
  * Function type for custom endpoint selection
  */
-export type EndpointSelectionFunction = (endpoints: string[]) => string;
+export type EndpointSelectionFunction = (endpoints: GonkaEndpoint[]) => GonkaEndpoint;
 
 /**
  * Options for the GonkaOpenAI client
@@ -26,8 +41,9 @@ export interface GonkaOpenAIOptions extends Omit<ClientOptions, 'baseURL' | 'def
    * List of Gonka network endpoints to use
    * One will be selected randomly for each client instance
    * If not provided, will use DEFAULT_ENDPOINTS or GONKA_ENDPOINTS environment variable
+   * Each endpoint must include both a URL and a TransferAddress (Cosmos address of the provider)
    */
-  endpoints?: string[];
+  endpoints?: GonkaEndpoint[];
 
   /**
    * Custom function for signing request bodies
@@ -46,6 +62,26 @@ export interface GonkaOpenAIOptions extends Omit<ClientOptions, 'baseURL' | 'def
 export type OpenAIFetch = (url: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
 /**
+ * Components required for signature generation
+ */
+export interface SignatureComponents {
+  /**
+   * The payload to sign
+   */
+  payload: any;
+  
+  /**
+   * Timestamp in nanoseconds
+   */
+  timestamp: bigint;
+  
+  /**
+   * Cosmos address of the endpoint provider
+   */
+  transferAddress: string;
+}
+
+/**
  * Function to sign request body with private key
  */
-export type SignatureFunction = (body: any, privateKey: string) => string | Promise<string>; 
+export type SignatureFunction = (components: SignatureComponents, privateKey: string) => string | Promise<string>; 
