@@ -2,8 +2,6 @@ package client
 
 import (
 	"context"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -18,16 +16,8 @@ func Test_GetParticipants(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	resp, err := cl.GetParticipantsWithProof(context.Background(), "1")
+	urls, err := cl.GetParticipantsUrls(context.Background(), "1")
+	fmt.Println(urls)
 	assert.NoError(t, err)
-	assert.NotNil(t, resp)
-
-	data, _ := json.MarshalIndent(resp, "", "  ")
-	fmt.Println(string(data))
-
-	val, err := hex.DecodeString(resp.ActiveParticipantsBytes)
-	assert.NoError(t, err)
-
-	err = VerifyIAVLProofAgainstAppHash(resp.Block.AppHash, resp.ProofOps.Ops, val)
-	assert.NoError(t, err)
+	assert.Len(t, urls, 3)
 }

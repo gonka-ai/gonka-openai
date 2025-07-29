@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	cryptotypes "github.com/cometbft/cometbft/proto/tendermint/crypto"
@@ -11,7 +12,7 @@ import (
 
 var ErrInvalidEpoch = errors.New("invalid epoch")
 
-func (g *GonkaOpenAI) GetParticipantsWithProof(ctx context.Context, epoch string) (*ActiveParticipantWithProof, error) {
+func (g *GonkaOpenAI) GetParticipantsUrls(ctx context.Context, epoch string) ([]string, error) {
 	if epoch == "" {
 		return nil, ErrInvalidEpoch
 	}
@@ -24,7 +25,21 @@ func (g *GonkaOpenAI) GetParticipantsWithProof(ctx context.Context, epoch string
 		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
 	}
 
-	return &resp, nil
+	val, err := hex.DecodeString(resp.ActiveParticipantsBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
+	}
+
+	err = VerifyIAVLProofAgainstAppHash(resp.Block.AppHash, resp.ProofOps.Ops, val)
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify participants proof: %w", err)
+	}
+
+	urls := make([]string, 0)
+	for _, participant := range resp.ActiveParticipants.Participants {
+		urls = append(urls, participant.InferenceUrl)
+	}
+	return urls, nil
 }
 
 // VerifyIAVLProofAgainstAppHash verifies the correctness of an ABCIQuery response for ActiveParticipants.
@@ -77,15 +92,4 @@ func VerifyIAVLProofAgainstAppHash(appHash []byte, proofOps []cryptotypes.ProofO
 		return fmt.Errorf("simple proof failed")
 	}
 	return nil
-}
-
-func getSpec(opType string) *ics23.ProofSpec {
-	switch opType {
-	case "ics23:iavl":
-		return ics23.IavlSpec
-	case "ics23:simple":
-		return ics23.TendermintSpec
-	default:
-		return nil
-	}
 }
