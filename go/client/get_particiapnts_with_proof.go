@@ -1,11 +1,16 @@
 package client
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	ed "github.com/cometbft/cometbft/crypto/ed25519"
 	cryptotypes "github.com/cometbft/cometbft/proto/tendermint/crypto"
+	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
+	tmtypes "github.com/cometbft/cometbft/types"
 	"github.com/cosmos/gogoproto/proto"
 	ics23 "github.com/cosmos/ics23/go"
 )
@@ -13,16 +18,9 @@ import (
 var ErrInvalidEpoch = errors.New("invalid epoch")
 
 func (g *GonkaOpenAI) GetParticipantsUrls(ctx context.Context, epoch string) ([]string, error) {
-	if epoch == "" {
-		return nil, ErrInvalidEpoch
-	}
-
-	url := fmt.Sprintf("v1/epochs/%v/participants", epoch)
-
-	var resp ActiveParticipantWithProof
-	err := g.Get(ctx, url, nil, &resp)
+	resp, err := g.getParticipants(ctx, epoch)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
+		return nil, err
 	}
 
 	val, err := hex.DecodeString(resp.ActiveParticipantsBytes)
@@ -90,6 +88,91 @@ func VerifyIAVLProofAgainstAppHash(appHash []byte, proofOps []cryptotypes.ProofO
 	}
 	if ok := ics23.VerifyMembership(ics23.TendermintSpec, appHash, &simpleProof, simpleOp.Key, storeRoot); !ok {
 		return fmt.Errorf("simple proof failed")
+	}
+	return nil
+}
+
+func (g *GonkaOpenAI) VerifyParticipants(ctx context.Context, expectedHashHex []byte) error {
+	resp, err := g.getParticipants(ctx, "current")
+	if err != nil {
+		return err
+	}
+
+	var olderEpochValidators map[string]string
+
+	for epochId := resp.ActiveParticipants.EpochId; epochId == 0; {
+		if bytes.Equal(resp.Block.AppHash, expectedHashHex) {
+			return nil
+		}
+
+		if len(olderEpochValidators) != 0 {
+			for range {
+				// TODO все валидаторы, подписавшие эпоху N+1, должны были быть active participants в эпоху N
+			}
+		}
+
+		block := resp.Block
+
+		vote := tmproto.Vote{
+			Type:   tmproto.PrecommitType,
+			Height: block.LastCommit.Height,
+			Round:  block.LastCommit.Round,
+			BlockID: tmproto.BlockID{
+				Hash: block.LastCommit.BlockID.Hash,
+				PartSetHeader: tmproto.PartSetHeader{
+					Total: block.LastCommit.BlockID.PartSetHeader.Total,
+					Hash:  block.LastCommit.BlockID.PartSetHeader.Hash,
+				},
+			},
+		}
+
+		validatorsData := make(map[string]string)
+		for _, validator := range resp.Validators {
+			validatorsData[validator.Address] = validator.PubKey
+		}
+
+		err := verifySignatures(vote, block.ChainID, validatorsData, block.LastCommit.Signatures)
+		if err != nil {
+			return err
+		}
+
+		// TODO verify participants
+
+		olderEpochValidators = validatorsData
+		epochId--
+	}
+	return fmt.Errorf("particiants unverified: expected hash %s, but got %s", hex.EncodeToString(expectedHashHex), resp.Block.AppHash)
+}
+
+func (g *GonkaOpenAI) getParticipants(ctx context.Context, epoch string) (*ActiveParticipantWithProof, error) {
+	if epoch == "" {
+		return nil, ErrInvalidEpoch
+	}
+
+	url := fmt.Sprintf("v1/epochs/%v/participants", epoch)
+	var resp ActiveParticipantWithProof
+	err := g.Get(ctx, url, nil, &resp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
+	}
+	return &resp, err
+}
+
+func verifySignatures(vote tmproto.Vote, chainId string, validators map[string]string, signatures []tmtypes.CommitSig) error {
+	for _, signature := range signatures {
+		vote.Timestamp = signature.Timestamp
+		signBytes := tmtypes.VoteSignBytes(chainId, &vote)
+
+		pubKeyBase64 := validators[signature.ValidatorAddress.String()]
+		pubKeyBytes, err := base64.StdEncoding.DecodeString(pubKeyBase64)
+		if err != nil {
+			return fmt.Errorf("decode pubkey: %w", err)
+		}
+
+		pubKey := ed.PubKey(pubKeyBytes)
+		if ok := pubKey.VerifySignature(signBytes, signature.Signature); !ok {
+			return fmt.Errorf("failed to verify signature for addr %v \n", pubKey.Address().String())
+		}
 	}
 	return nil
 }
