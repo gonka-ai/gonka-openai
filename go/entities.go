@@ -1,4 +1,4 @@
-package client
+package gonkaopenai
 
 import (
 	cryptotypes "github.com/cometbft/cometbft/proto/tendermint/crypto"

@@ -33,7 +33,7 @@ if missing_env_vars:
 # If GONKA_ENDPOINTS is set, we'll use real endpoints and real requests
 USE_REAL_REQUESTS = bool(os.environ.get('GONKA_ENDPOINTS'))
 
-default_model = "unsloth/llama-3-8b-Instruct"
+default_model = "Qwen/QwQ-32B"
 
 def run_tests():
     """Run the tests for the GonkaOpenAI library."""

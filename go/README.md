@@ -27,9 +27,9 @@ func main() {
     client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
         GonkaPrivateKey: "0x1234...", // ECDSA private key for signing requests
         Endpoints: []gonkaopenai.Endpoint{
-            {URL: "https://gonka1.example.com/v1", Address: "transfer_address_1"},
-            {URL: "https://gonka2.example.com/v1", Address: "transfer_address_2"},
-        }, // List of endpoints with their transfer addresses
+            {URL: "https://gonka1.example.com/v1", Address: "provider_address_1"},
+            {URL: "https://gonka2.example.com/v1", Address: "provider_address_2"},
+        }, // List of endpoints with their provider addresses
         // Optional parameters:
         // GonkaAddress: "cosmos1...", // Override derived Cosmos address
     })
@@ -64,15 +64,15 @@ import (
 )
 
 func main() {
-    // Define endpoints with their transfer addresses
+    // Define endpoints with their provider addresses
     endpoints := []gonkaopenai.Endpoint{
-        {URL: "https://gonka1.example.com/v1", Address: "transfer_address_1"},
-        {URL: "https://gonka2.example.com/v1", Address: "transfer_address_2"},
+        {URL: "https://gonka1.example.com/v1", Address: "provider_address_1"},
+        {URL: "https://gonka2.example.com/v1", Address: "provider_address_2"},
     }
 
     httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
         PrivateKey: "0x1234...",
-        Endpoints:  endpoints, // List of endpoints with their transfer addresses
+        Endpoints:  endpoints, // List of endpoints with their provider addresses
     })
 
     client := openai.NewClient(
@@ -103,7 +103,7 @@ Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
 - `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
-- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their transfer addresses in the format "URL;ADDRESS,URL;ADDRESS" (e.g., "https://myendpoint.com;gonka1fgjkdsafjalf,https://anotherendpoint.com;gonka2abcdefghijk")
+- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their provider addresses in the format "URL;ADDRESS,URL;ADDRESS" (e.g., "https://myendpoint.com;gonka1fgjkdsafjalf,https://anotherendpoint.com;gonka2abcdefghijk")
 
 ## Advanced Configuration
 
@@ -115,8 +115,8 @@ You can provide a custom endpoint selection strategy:
 client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
     GonkaPrivateKey: "0x1234...",
     Endpoints: []gonkaopenai.Endpoint{
-        {URL: "https://gonka1.example.com/v1", Address: "transfer_address_1"},
-        {URL: "https://gonka2.example.com/v1", Address: "transfer_address_2"},
+        {URL: "https://gonka1.example.com/v1", Address: "provider_address_1"},
+        {URL: "https://gonka2.example.com/v1", Address: "provider_address_2"},
     },
     EndpointSelectionStrategy: func(endpoints []gonkaopenai.Endpoint) string {
         return endpoints[0].URL // Always select the first endpoint's URL
@@ -126,14 +126,14 @@ client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
 
 ### Endpoint Configuration
 
-Each endpoint must have an associated transfer address for signature generation. The `Endpoint` type pairs a URL with its transfer address:
+Each endpoint must have an associated provider address for signature generation. The `Endpoint` type pairs a URL with its provider address:
 
 ```go
-// Define endpoints with their transfer addresses
+// Define endpoints with their provider addresses
 endpoints := []gonkaopenai.Endpoint{
-    {URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
-    {URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
-    {URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
+    {URL: "https://api.gonka.testnet.example.com", Address: "provider_address_1"},
+    {URL: "https://api2.gonka.testnet.example.com", Address: "provider_address_2"},
+    {URL: "https://api3.gonka.testnet.example.com", Address: "provider_address_3"},
 }
 
 // Use with NewGonkaOpenAI
@@ -152,7 +152,7 @@ httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
 })
 ```
 
-This approach ensures that each request is signed with the appropriate transfer address for the endpoint it's targeting.
+This approach ensures that each request is signed with the appropriate provider address for the endpoint it's targeting.
 
 ## Building from Source
 

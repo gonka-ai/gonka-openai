@@ -3,7 +3,7 @@ import { GonkaOpenAI, gonkaBaseURL, gonkaFetch } from './dist/index.js';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
-let defaultModel = 'unsloth/llama-3-8b-Instruct';
+let defaultModel = 'Qwen/QwQ-32B';
 
 // Check for required environment variables
 const requiredEnvVars = ['GONKA_PRIVATE_KEY'];

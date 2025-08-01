@@ -1,9 +1,8 @@
-package client
+package gonkaopenai
 
 import (
 	"context"
 	"fmt"
-	"github.com/libermans/gonka-openai/go"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 	"net/http"
@@ -22,10 +21,10 @@ type Options struct {
 	APIKey                    string
 	GonkaPrivateKey           string
 	GonkaAddress              string
-	Endpoints                 []Endpoint // List of endpoints with their transfer addresses
 	EndpointSelectionStrategy func([]Endpoint) string
 	HTTPClient                *http.Client
 	OrgID                     string
+	SourceUrl                 string
 }
 
 // GonkaOpenAI wraps the official openai.Client.
@@ -39,18 +38,18 @@ type GonkaOpenAI struct {
 func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	privateKey := opts.GonkaPrivateKey
 	if privateKey == "" {
-		privateKey = os.Getenv(gonkaopenai.EnvPrivateKey)
+		privateKey = os.Getenv(EnvPrivateKey)
 	}
 	if privateKey == "" {
-		return nil, fmt.Errorf("private key must be provided via opts or %s", gonkaopenai.EnvPrivateKey)
+		return nil, fmt.Errorf("private key must be provided via opts or %s", EnvPrivateKey)
 	}
 
 	// Validate that we have endpoints with addresses
 	if len(opts.Endpoints) == 0 {
-	    opts.Endpoints = GetEndpointsFromEnv()
-	    if len(opts.Endpoints) == 0 {
-    		return nil, fmt.Errorf("at least one endpoint with address must be provided")
-	    }
+		opts.Endpoints = GetEndpointsFromEnv()
+		if len(opts.Endpoints) == 0 {
+			return nil, fmt.Errorf("at least one endpoint with address must be provided")
+		}
 	}
 
 	// Validate that each endpoint has a non-empty address
@@ -62,21 +61,21 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 
 	baseURL := ""
 	if opts.EndpointSelectionStrategy != nil {
-		baseURL = gonkaopenai.CustomEndpointSelection(opts.EndpointSelectionStrategy, opts.Endpoints)
+		baseURL = CustomEndpointSelection(opts.EndpointSelectionStrategy, opts.Endpoints)
 	} else {
-		baseURL = gonkaopenai.GonkaBaseURL(opts.Endpoints)
+		baseURL = GonkaBaseURL(opts.Endpoints)
 	}
 
 	address := opts.GonkaAddress
 	if address == "" {
-		address = os.Getenv(gonkaopenai.EnvAddress)
+		address = os.Getenv(EnvAddress)
 	}
 	if address == "" {
-		addr, err := gonkaopenai.GonkaAddress(privateKey)
+		addr, err := GonkaAddress(privateKey)
 		if err == nil {
 			address = addr
 		} else {
-			prefix := strings.Split(gonkaopenai.GonkaChainID, "-")[0]
+			prefix := strings.Split(GonkaChainID, "-")[0]
 			if len(privateKey) > 40 {
 				address = fmt.Sprintf("%s1%s", prefix, privateKey[:40])
 			} else {
@@ -85,7 +84,7 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 		}
 	}
 
-	httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+	httpClient := GonkaHTTPClient(HTTPClientOptions{
 		PrivateKey: privateKey,
 		Address:    address,
 		Endpoints:  opts.Endpoints,

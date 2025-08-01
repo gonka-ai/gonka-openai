@@ -23,11 +23,11 @@ const client = new GonkaOpenAI({
   endpoints: [
     {
       url: 'https://gonka1.example.com/v1',
-      transferAddress: 'gonka1...' // Cosmos address of the endpoint provider
+      transferAddress: 'gonka1...' // gonka address of the endpoint provider
     }
   ], // Gonka endpoints with transfer addresses
   // Optional parameters:
-  // gonkaAddress: 'cosmos1...', // Override derived Cosmos address
+  // gonkaAddress: 'gonka1...', // Override derived gonka address
 });
 
 // Use exactly like the original OpenAI client
@@ -52,7 +52,7 @@ const fetch = gonkaFetch({
 const endpoints = [
   {
     url: 'https://gonka1.example.com/v1',
-    transferAddress: 'gonka1...' // Cosmos address of the endpoint provider
+    transferAddress: 'gonka1...' // gonka address of the endpoint provider
   }
 ];
 
@@ -78,7 +78,7 @@ Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
 - `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their transfer addresses. Each endpoint is specified as `url;transferAddress` (semicolon-separated pair).
-- `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
+- `GONKA_ADDRESS`: (Optional) Override the derived gonka address
 
 Example with environment variables:
 
@@ -134,7 +134,7 @@ const client = new GonkaOpenAI({
 
 ## TransferAddress Requirement
 
-Each endpoint in the Gonka network requires a **TransferAddress**, which is the Cosmos address of the endpoint provider. This address is essential for the request signing process and cannot be omitted.
+Each endpoint in the Gonka network requires a **TransferAddress**, which is the gonka address of the endpoint provider. This address is essential for the request signing process and cannot be omitted.
 
 - The TransferAddress is used as part of the signature payload, along with the request body and a timestamp
 - It identifies the provider of the endpoint you're connecting to
@@ -146,7 +146,7 @@ When specifying endpoints, always include both the URL and the TransferAddress:
 const endpoints = [
   {
     url: 'https://gonka1.example.com/v1',
-    transferAddress: 'gonka1...' // Cosmos address of the endpoint provider
+    transferAddress: 'gonka1...' // gonka address of the endpoint provider
   }
 ];
 ```
@@ -161,7 +161,7 @@ const endpoints = [
    - Signs the combined data with your private key using ECDSA
    - Adds the signature to the `Authorization` header
    - Adds the timestamp to the `X-Timestamp` header
-3. **Address Generation**: Your Cosmos address (derived from your private key) is added to the `X-Requester-Address` header
+3. **Address Generation**: Your gonka address (derived from your private key) is added to the `X-Requester-Address` header
 4. **Endpoint Selection**: Requests are routed to the Gonka network using a randomly selected endpoint
 
 ## Cryptographic Implementation
@@ -169,7 +169,7 @@ const endpoints = [
 The library implements:
 
 1. **ECDSA Signatures**: Using Secp256k1 curve to sign request bodies with the private key
-2. **Gonka Address Generation**: Deriving Cosmos-compatible addresses from private keys
+2. **Gonka Address Generation**: Deriving gonka-compatible addresses from private keys
 3. **Dynamic Request Signing**: Using a custom fetch implementation to intercept and sign each request before it's sent
 
 ## Building from Source

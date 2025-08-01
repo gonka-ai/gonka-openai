@@ -1,45 +1,82 @@
-package client
+package gonkaopenai
 
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	cryptotypes "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	"github.com/cosmos/gogoproto/proto"
 	ics23 "github.com/cosmos/ics23/go"
+	"net/http"
 )
 
 var ErrInvalidEpoch = errors.New("invalid epoch")
 
-func (g *GonkaOpenAI) GetParticipantsUrls(ctx context.Context, epoch string) ([]string, error) {
+// GetParticipantsWithProof fetches participants from the specified base URL and epoch,
+// verifies the proof, and returns a list of Endpoints.
+// This function is independent of the GonkaOpenAI client.
+// Specify "current" as the epoch to fetch the current participants.
+func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string) ([]Endpoint, error) {
 	if epoch == "" {
 		return nil, ErrInvalidEpoch
 	}
 
-	url := fmt.Sprintf("v1/epochs/%v/participants", epoch)
+	// Ensure baseURL doesn't end with a slash
+	if baseURL != "" && baseURL[len(baseURL)-1] == '/' {
+		baseURL = baseURL[:len(baseURL)-1]
+	}
 
-	var resp ActiveParticipantWithProof
-	err := g.Get(ctx, url, nil, &resp)
+	url := fmt.Sprintf("%s/v1/epochs/%v/participants", baseURL, epoch)
+
+	// Create a new HTTP request
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send the request
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
 	}
+	defer resp.Body.Close()
 
-	val, err := hex.DecodeString(resp.ActiveParticipantsBytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
+	// Check response status
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch participants with proof: status code %d", resp.StatusCode)
 	}
 
-	err = VerifyIAVLProofAgainstAppHash(resp.Block.AppHash, resp.ProofOps.Ops, val)
+	// Decode the response
+	var participantResp ActiveParticipantWithProof
+	if err := json.NewDecoder(resp.Body).Decode(&participantResp); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	val, err := hex.DecodeString(participantResp.ActiveParticipantsBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode participants bytes: %w", err)
+	}
+
+	err = VerifyIAVLProofAgainstAppHash(participantResp.Block.AppHash, participantResp.ProofOps.Ops, val)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify participants proof: %w", err)
 	}
 
-	urls := make([]string, 0)
-	for _, participant := range resp.ActiveParticipants.Participants {
-		urls = append(urls, participant.InferenceUrl)
+	// Convert ActiveParticipants to Endpoints
+	endpoints := make([]Endpoint, 0, len(participantResp.ActiveParticipants.Participants))
+	for _, participant := range participantResp.ActiveParticipants.Participants {
+		endpoints = append(endpoints, Endpoint{
+			URL:     participant.InferenceUrl,
+			Address: participant.Index,
+		})
 	}
-	return urls, nil
+	return endpoints, nil
 }
 
 // VerifyIAVLProofAgainstAppHash verifies the correctness of an ABCIQuery response for ActiveParticipants.
