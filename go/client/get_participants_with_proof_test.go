@@ -3,8 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
-	tmproto "github.com/cometbft/cometbft/proto/tendermint/types"
 	"github.com/stretchr/testify/assert"
+	"strings"
 	"testing"
 )
 
@@ -32,29 +32,15 @@ func Test_SignatureVerification(t *testing.T) {
 	})
 	assert.NoError(t, err)
 
-	resp, err := cl.getParticipants(context.Background(), "2")
+	const (
+		validAppHash   = "5A8D509CFEE2E1E55897D814A1C0EF7BC9E1291DB5BC5CFC1F1E13F1C93D677F"
+		invalidAppHash = "SOMEHASH"
+	)
+
+	err = cl.VerifyParticipants(context.Background(), validAppHash)
 	assert.NoError(t, err)
 
-	block := resp.Block
-	vote := tmproto.Vote{
-		Type:   tmproto.PrecommitType,
-		Height: block.LastCommit.Height,
-		Round:  block.LastCommit.Round,
-		BlockID: tmproto.BlockID{
-			Hash: block.LastCommit.BlockID.Hash,
-			PartSetHeader: tmproto.PartSetHeader{
-				Total: block.LastCommit.BlockID.PartSetHeader.Total,
-				Hash:  block.LastCommit.BlockID.PartSetHeader.Hash,
-			},
-		},
-		Timestamp: block.Time,
-	}
-
-	validatorsData := make(map[string]string)
-	for _, validator := range resp.Validators {
-		validatorsData[validator.Address] = validator.PubKey
-	}
-
-	err = verifySignatures(vote, block.ChainID, validatorsData, block.LastCommit.Signatures)
-	assert.NoError(t, err)
+	err = cl.VerifyParticipants(context.Background(), invalidAppHash)
+	assert.Error(t, err)
+	assert.True(t, strings.Contains(err.Error(), "participants unverified"))
 }
