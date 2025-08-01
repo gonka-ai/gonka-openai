@@ -2,13 +2,13 @@ package gonkaopenai_test
 
 import (
 	"context"
-	"os"
-	"testing"
-
 	"github.com/joho/godotenv"
 	gonkaopenai "github.com/libermans/gonka-openai/go"
-	openai "github.com/openai/openai-go"
+	"github.com/libermans/gonka-openai/go/client"
+	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"os"
+	"testing"
 )
 
 func TestExampleUsage(t *testing.T) {
@@ -28,7 +28,7 @@ func TestExampleUsage(t *testing.T) {
 	t.Log("Using Gonka Base URL:", baseURL)
 
 	// The APIKey is often a mock or test-specific key in test environments
-	client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
+	client, err := client.NewGonkaOpenAI(client.Options{
 		GonkaPrivateKey: os.Getenv(gonkaopenai.EnvPrivateKey),
 	})
 	if err != nil {
