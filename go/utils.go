@@ -2,6 +2,7 @@ package gonkaopenai
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	crand "crypto/rand"
 	"crypto/sha256"
@@ -10,8 +11,8 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"math/rand"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -21,54 +22,24 @@ import (
 	"golang.org/x/crypto/ripemd160" //nolint:SA1019 // RIPEMD-160 is required for Cosmos address generation, standard despite deprecation.
 )
 
-// GonkaBaseURL returns a random endpoint URL from the provided list or environment.
-func GonkaBaseURL(endpoints []Endpoint) string {
-	eps := make([]Endpoint, 0)
-	if len(endpoints) > 0 {
-		eps = endpoints
-	} else {
-		eps = GetEndpointsFromEnv()
-	}
-	if len(eps) == 0 {
-		return ""
-	}
-	if len(eps) == 1 {
-		return eps[0].URL
-	}
-	n, err := crand.Int(crand.Reader, big.NewInt(int64(len(eps))))
-	if err != nil {
-		return eps[0].URL
-	}
-	return eps[int(n.Int64())].URL
-}
-
-func GetEndpointsFromEnv() []Endpoint {
-	env := os.Getenv(EnvEndpoints)
-	if env == "" {
-		return DefaultEndpoints
-	}
-	eps := make([]Endpoint, 0)
-	// Parse environment endpoints in format "URL;ADDRESS,URL;ADDRESS"
-	for _, e := range strings.Split(env, ",") {
-		parts := strings.Split(strings.TrimSpace(e), ";")
-		if len(parts) == 2 {
-			// Format is "URL;ADDRESS"
-			url := strings.TrimSpace(parts[0])
-			address := strings.TrimSpace(parts[1])
-			eps = append(eps, Endpoint{URL: url, Address: address})
-		}
-		// No backward compatibility: if no address is provided, the endpoint is ignored
-	}
-	return eps
-}
-
 // CustomEndpointSelection allows providing custom strategy.
 func CustomEndpointSelection(f func([]Endpoint) string, endpoints []Endpoint) string {
 	eps := endpoints
-	if len(eps) == 0 {
-		eps = GetEndpointsFromEnv()
-	}
 	return f(eps)
+}
+
+// GonkaBaseURL randomly selects an endpoint URL from the provided list.
+func GonkaBaseURL(endpoints []Endpoint) string {
+	if len(endpoints) == 0 {
+		return ""
+	}
+
+	// Initialize random seed
+	rand.Seed(time.Now().UnixNano())
+
+	// Select a random endpoint
+	randomIndex := rand.Intn(len(endpoints))
+	return endpoints[randomIndex].URL
 }
 
 // GonkaSignature signs request body with ECDSA secp256k1 and returns base64.
@@ -229,10 +200,11 @@ type HTTPClientOptions struct {
 	Address    string
 	Endpoints  []Endpoint
 	Client     *http.Client
+	SourceUrl  string // URL to fetch endpoints from using GetParticipantsWithProof
 }
 
 // GonkaHTTPClient creates an HTTP client that signs requests with the private key.
-func GonkaHTTPClient(opts HTTPClientOptions) *http.Client {
+func GonkaHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	if opts.Client == nil {
 		opts.Client = &http.Client{}
 	}
@@ -242,6 +214,35 @@ func GonkaHTTPClient(opts HTTPClientOptions) *http.Client {
 			opts.Address = addr
 		}
 	}
+
+	// Get endpoints from SourceUrl if provided
+	endpoints := opts.Endpoints
+	if opts.SourceUrl != "" {
+		// SourceUrl takes precedence over Endpoints
+		var err error
+		endpoints, err = GetParticipantsWithProof(context.Background(), opts.SourceUrl, "current")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get participants with proof: %w", err)
+		}
+
+		// Ensure we got at least one endpoint
+		if len(endpoints) == 0 {
+			return nil, fmt.Errorf("no endpoints found from SourceUrl: %s", opts.SourceUrl)
+		}
+	}
+
+	// Ensure we have at least one endpoint
+	if len(endpoints) == 0 {
+		return nil, fmt.Errorf("at least one endpoint must be provided via Endpoints or SourceUrl")
+	}
+
+	// Validate that each endpoint has a non-empty address
+	for _, endpoint := range endpoints {
+		if endpoint.Address == "" {
+			return nil, fmt.Errorf("endpoint %s has an empty address, all endpoints must have an address", endpoint.URL)
+		}
+	}
+
 	rt := opts.Client.Transport
 	if rt == nil {
 		rt = http.DefaultTransport
@@ -250,7 +251,7 @@ func GonkaHTTPClient(opts HTTPClientOptions) *http.Client {
 		rt:         rt,
 		privateKey: opts.PrivateKey,
 		address:    opts.Address,
-		endpoints:  opts.Endpoints,
+		endpoints:  endpoints,
 	}
-	return opts.Client
+	return opts.Client, nil
 }

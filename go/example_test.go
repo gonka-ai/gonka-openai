@@ -25,28 +25,14 @@ func TestExampleUsage(t *testing.T) {
 
 	t.Log("\n------ Test Environment ------") // Use t.Log for test output
 
-	// Create a list of endpoints with their transfer addresses
-	// In a real application, these would be loaded from configuration or environment variables
-	//endpoints := []gonkaopenai.Endpoint{
-	//	{URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
-	//	{URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
-	//	{URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
-	//}
-	endpoints := gonkaopenai.GetEndpointsFromEnv()
-
-	// Get a random endpoint URL for the base URL
-	baseURL := gonkaopenai.GonkaBaseURL(endpoints)
-	t.Log("Using Gonka Base URL:", baseURL)
-
-	t.Log("Using endpoints with transfer addresses:")
-	for _, endpoint := range endpoints {
-		t.Logf("  %s -> %s", endpoint.URL, endpoint.Address)
-	}
+	// Define a source URL for fetching endpoints
+	sourceUrl := "http://localhost:9000"
+	t.Log("Using Source URL:", sourceUrl)
 
 	// The APIKey is often a mock or test-specific key in test environments
 	client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
 		GonkaPrivateKey: os.Getenv(gonkaopenai.EnvPrivateKey),
-		Endpoints:       endpoints,
+		SourceUrl:       sourceUrl,
 	})
 	if err != nil {
 		t.Fatalf("Error creating client: %v", err) // Use t.Fatalf to fail the test on critical errors
@@ -106,40 +92,39 @@ func TestDirectOpenAIUsage(t *testing.T) {
 		t.Log("Warning: GonkaAddress could not be determined. GonkaHTTPClient might fail or use defaults.")
 	}
 
-	// 3. Create a list of endpoints with their transfer addresses
-	// In a real application, these would be loaded from configuration or environment variables
-	//endpoints := []gonkaopenai.Endpoint{
-	//	{URL: "https://api.gonka.testnet.example.com", Address: "transfer_address_1"},
-	//	{URL: "https://api2.gonka.testnet.example.com", Address: "transfer_address_2"},
-	//	{URL: "https://api3.gonka.testnet.example.com", Address: "transfer_address_3"},
-	//}
-	endpoints := gonkaopenai.GetEndpointsFromEnv()
+	// 3. Define a source URL for fetching endpoints
+	sourceUrl := "http://localhost:9000"
+	t.Log("Using Source URL:", sourceUrl)
 
-	// Get a random endpoint URL for the base URL
-	baseURL := gonkaopenai.GonkaBaseURL(endpoints)
-	t.Log("Using Gonka Base URL for manual client:", baseURL)
 	t.Log("Using Gonka Private Key (for HTTP client):", gonkaPrivateKey[:5]+"...") // Log a snippet for verification
 	t.Log("Using Gonka Address (for HTTP client):", gonkaAddress)
 
-	t.Log("Using endpoints with transfer addresses:")
-	for _, endpoint := range endpoints {
-		t.Logf("  %s -> %s", endpoint.URL, endpoint.Address)
-	}
-
-	// 4. Create Gonka HTTP Client with endpoints
-	customHTTPClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+	// 4. Create Gonka HTTP Client with SourceUrl
+	customHTTPClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
 		PrivateKey: gonkaPrivateKey,
 		Address:    gonkaAddress,
-		Endpoints:  endpoints,
-		Client:     nil, // No base client override for this test
+		SourceUrl:  sourceUrl, // Use SourceUrl directly instead of fetching endpoints separately
+		Client:     nil,       // No base client override for this test
 	})
-	t.Log("Custom Gonka HTTP Client configured.")
+	if err != nil {
+		t.Fatalf("Error creating HTTP client: %v", err)
+		return
+	}
+	t.Log("Custom Gonka HTTP Client configured with SourceUrl.")
+
+	// Get endpoints for baseURL (could also be done with GetParticipantsWithProof)
+	endpoints, err := gonkaopenai.GetParticipantsWithProof(context.Background(), sourceUrl, "current")
+	if err != nil {
+		t.Fatalf("Error fetching endpoints: %v", err)
+		return
+	}
 
 	// 5. Initialize OpenAI Client with Gonka settings
 	// Using the "mock-api-key" as per your previous change.
 	// If you want to use a real key for this Gonka setup, change it here or load from env.
 	clientAPIKey := "mock-api-key"
 	var clientOptions []option.RequestOption
+	baseURL := gonkaopenai.GonkaBaseURL(endpoints) // Get a random endpoint URL
 	clientOptions = append(clientOptions, option.WithBaseURL(baseURL))
 	clientOptions = append(clientOptions, option.WithHTTPClient(customHTTPClient))
 	clientOptions = append(clientOptions, option.WithAPIKey(clientAPIKey))

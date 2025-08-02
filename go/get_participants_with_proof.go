@@ -71,8 +71,12 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 	// Convert ActiveParticipants to Endpoints
 	endpoints := make([]Endpoint, 0, len(participantResp.ActiveParticipants.Participants))
 	for _, participant := range participantResp.ActiveParticipants.Participants {
+
+		inferenceUrl := participant.InferenceUrl
 		endpoints = append(endpoints, Endpoint{
-			URL:     participant.InferenceUrl,
+			// Adding v1 is needed at the moment, as gonka APIs expect chats to hit v1/chat/completions,
+			// but openai clients do NOT att on the v1 automatically.
+			URL:     inferenceUrl + "/v1",
 			Address: participant.Index,
 		})
 	}

@@ -44,16 +44,28 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 		return nil, fmt.Errorf("private key must be provided via opts or %s", EnvPrivateKey)
 	}
 
-	// Validate that we have endpoints with addresses
-	if len(opts.Endpoints) == 0 {
-		opts.Endpoints = GetEndpointsFromEnv()
-		if len(opts.Endpoints) == 0 {
-			return nil, fmt.Errorf("at least one endpoint with address must be provided")
-		}
+	// Get SourceUrl from options or environment variable
+	sourceUrl := opts.SourceUrl
+	if sourceUrl == "" {
+		sourceUrl = os.Getenv(EnvSourceUrl)
+	}
+	if sourceUrl == "" {
+		return nil, fmt.Errorf("SourceUrl must be provided via opts or %s", EnvSourceUrl)
+	}
+
+	// Get endpoints using GetParticipantsWithProof
+	endpoints, err := GetParticipantsWithProof(context.Background(), sourceUrl, "current") // Using default epoch "current"
+	if err != nil {
+		return nil, fmt.Errorf("failed to get participants with proof: %w", err)
+	}
+
+	// Ensure we got at least one endpoint
+	if len(endpoints) == 0 {
+		return nil, fmt.Errorf("no endpoints found from SourceUrl: %s", sourceUrl)
 	}
 
 	// Validate that each endpoint has a non-empty address
-	for _, endpoint := range opts.Endpoints {
+	for _, endpoint := range endpoints {
 		if endpoint.Address == "" {
 			return nil, fmt.Errorf("endpoint %s has an empty address, all endpoints must have an address", endpoint.URL)
 		}
@@ -61,9 +73,9 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 
 	baseURL := ""
 	if opts.EndpointSelectionStrategy != nil {
-		baseURL = CustomEndpointSelection(opts.EndpointSelectionStrategy, opts.Endpoints)
+		baseURL = CustomEndpointSelection(opts.EndpointSelectionStrategy, endpoints)
 	} else {
-		baseURL = GonkaBaseURL(opts.Endpoints)
+		baseURL = GonkaBaseURL(endpoints)
 	}
 
 	address := opts.GonkaAddress
@@ -84,12 +96,16 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 		}
 	}
 
-	httpClient := GonkaHTTPClient(HTTPClientOptions{
+	// Create HTTP client with endpoints
+	httpClient, err := GonkaHTTPClient(HTTPClientOptions{
 		PrivateKey: privateKey,
 		Address:    address,
-		Endpoints:  opts.Endpoints,
+		Endpoints:  endpoints, // We already have endpoints from SourceUrl
 		Client:     opts.HTTPClient,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP client: %w", err)
+	}
 
 	var clientOptions []option.RequestOption
 	clientOptions = append(clientOptions, option.WithBaseURL(baseURL))

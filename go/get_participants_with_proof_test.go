@@ -10,7 +10,7 @@ import (
 func Test_GetParticipantsWithProof(t *testing.T) {
 	// Use the standalone function with a base URL
 	baseURL := "http://localhost:9000"
-	endpoints, err := GetParticipantsWithProof(context.Background(), baseURL, "1")
+	endpoints, err := GetParticipantsWithProof(context.Background(), baseURL, "current")
 
 	fmt.Println("Endpoints:", endpoints)
 	assert.NoError(t, err)
@@ -32,7 +32,7 @@ func Test_GetParticipants(t *testing.T) {
 	_, err := NewGonkaOpenAI(Options{
 		GonkaPrivateKey: "10af8dc1f63fb90cfa39943a5afbf262cd84f24919e7d05653e3b03313e685ce",
 		GonkaAddress:    "cosmos1waj8q9g2ekgardafc6plg77rgu2l3vfrclrm4v",
-		Endpoints:       []Endpoint{{URL: "http://localhost:9000", Address: "test_address"}},
+		SourceUrl:       "http://localhost:9000",
 		OrgID:           "gonka-client-test-id",
 	})
 	assert.NoError(t, err)

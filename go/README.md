@@ -23,13 +23,11 @@ import (
 )
 
 func main() {
-    // Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
+    // Private key and SourceUrl can be provided directly or through environment variables
+    // GONKA_PRIVATE_KEY and GONKA_SOURCE_URL respectively
     client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
         GonkaPrivateKey: "0x1234...", // ECDSA private key for signing requests
-        Endpoints: []gonkaopenai.Endpoint{
-            {URL: "https://gonka1.example.com/v1", Address: "provider_address_1"},
-            {URL: "https://gonka2.example.com/v1", Address: "provider_address_2"},
-        }, // List of endpoints with their provider addresses
+        SourceUrl: "https://api.gonka.testnet.example.com", // URL to fetch endpoints from
         // Optional parameters:
         // GonkaAddress: "cosmos1...", // Override derived Cosmos address
     })
@@ -64,16 +62,23 @@ import (
 )
 
 func main() {
-    // Define endpoints with their provider addresses
-    endpoints := []gonkaopenai.Endpoint{
-        {URL: "https://gonka1.example.com/v1", Address: "provider_address_1"},
-        {URL: "https://gonka2.example.com/v1", Address: "provider_address_2"},
-    }
-
-    httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+    // You can use SourceUrl directly in GonkaHTTPClient
+    sourceUrl := "https://api.gonka.testnet.example.com"
+    
+    // GonkaHTTPClient will fetch endpoints from SourceUrl
+    httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
         PrivateKey: "0x1234...",
-        Endpoints:  endpoints, // List of endpoints with their provider addresses
+        SourceUrl:  sourceUrl, // URL to fetch endpoints from
     })
+    if err != nil {
+        panic(err)
+    }
+    
+    // Get endpoints for baseURL
+    endpoints, err := gonkaopenai.GetParticipantsWithProof(context.Background(), sourceUrl, "current")
+    if err != nil {
+        panic(err)
+    }
 
     client := openai.NewClient(
         option.WithAPIKey("mock-api-key"), // OpenAI requires any key
@@ -103,56 +108,66 @@ Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
 - `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
-- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their provider addresses in the format "URL;ADDRESS,URL;ADDRESS" (e.g., "https://myendpoint.com;gonka1fgjkdsafjalf,https://anotherendpoint.com;gonka2abcdefghijk")
+- `GONKA_SOURCE_URL`: (Optional) URL to fetch endpoints from
 
 ## Advanced Configuration
 
 ### Custom Endpoint Selection
 
-You can provide a custom endpoint selection strategy:
+You can provide a custom endpoint selection strategy for the endpoints fetched from `SourceUrl`:
 
 ```go
 client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
     GonkaPrivateKey: "0x1234...",
-    Endpoints: []gonkaopenai.Endpoint{
-        {URL: "https://gonka1.example.com/v1", Address: "provider_address_1"},
-        {URL: "https://gonka2.example.com/v1", Address: "provider_address_2"},
-    },
+    SourceUrl: "https://api.gonka.testnet.example.com",
     EndpointSelectionStrategy: func(endpoints []gonkaopenai.Endpoint) string {
         return endpoints[0].URL // Always select the first endpoint's URL
     },
 })
 ```
 
+Note: The `EndpointSelectionStrategy` field is deprecated but still functional. It will be applied to the endpoints fetched from `SourceUrl`.
+
 ### Endpoint Configuration
 
-Each endpoint must have an associated provider address for signature generation. The `Endpoint` type pairs a URL with its provider address:
+Endpoints are now exclusively fetched from the `SourceUrl` parameter using the `GetParticipantsWithProof` function. This ensures that all endpoints are properly verified and authenticated.
+
+You can either:
+
+1. Fetch endpoints yourself and pass them to `GonkaHTTPClient`:
 
 ```go
-// Define endpoints with their provider addresses
-endpoints := []gonkaopenai.Endpoint{
-    {URL: "https://api.gonka.testnet.example.com", Address: "provider_address_1"},
-    {URL: "https://api2.gonka.testnet.example.com", Address: "provider_address_2"},
-    {URL: "https://api3.gonka.testnet.example.com", Address: "provider_address_3"},
+// Get endpoints from SourceUrl
+sourceUrl := "https://api.gonka.testnet.example.com"
+endpoints, err := gonkaopenai.GetParticipantsWithProof(context.Background(), sourceUrl, "current")
+if err != nil {
+    panic(err)
 }
 
-// Use with NewGonkaOpenAI
-client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
-    GonkaPrivateKey: "0x1234...",
-    Endpoints:       endpoints,
-})
-```
-
-Or when using the GonkaHTTPClient directly:
-
-```go
-httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+// Use with GonkaHTTPClient directly
+httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
     PrivateKey: "0x1234...",
     Endpoints:  endpoints,
 })
+if err != nil {
+    panic(err)
+}
 ```
 
-This approach ensures that each request is signed with the appropriate provider address for the endpoint it's targeting.
+2. Or let `GonkaHTTPClient` fetch the endpoints for you using `SourceUrl`:
+
+```go
+// Let GonkaHTTPClient fetch endpoints for you
+httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+    PrivateKey: "0x1234...",
+    SourceUrl:  "https://api.gonka.testnet.example.com", // URL to fetch endpoints from
+})
+if err != nil {
+    panic(err)
+}
+```
+
+Both approaches ensure that each request is signed with the appropriate provider address for the endpoint it's targeting, and that all endpoints are properly verified.
 
 ## Building from Source
 
