@@ -33,11 +33,15 @@ func Test_SignatureVerification(t *testing.T) {
 	assert.NoError(t, err)
 
 	const (
-		validAppHash   = "5A8D509CFEE2E1E55897D814A1C0EF7BC9E1291DB5BC5CFC1F1E13F1C93D677F"
-		invalidAppHash = "SOMEHASH"
+		genesisBlockAppHash = "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+		firstEpochAppHash   = "2EA1B5BB06B68801165D98B444B334ACEDC6F9742975FD7B4868C8A24702A541"
+		invalidAppHash      = "SOMEHASH"
 	)
 
-	err = cl.VerifyParticipants(context.Background(), validAppHash)
+	err = cl.VerifyParticipants(context.Background(), genesisBlockAppHash)
+	assert.NoError(t, err)
+
+	err = cl.VerifyParticipants(context.Background(), firstEpochAppHash)
 	assert.NoError(t, err)
 
 	err = cl.VerifyParticipants(context.Background(), invalidAppHash)
