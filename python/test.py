@@ -8,6 +8,8 @@ import json
 import unittest.mock
 from dotenv import load_dotenv
 
+from src.utils import get_endpoints_from_env_or_default
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -30,6 +32,8 @@ if missing_env_vars:
 
 # If GONKA_ENDPOINTS is set, we'll use real endpoints and real requests
 USE_REAL_REQUESTS = bool(os.environ.get('GONKA_ENDPOINTS'))
+
+default_model = "Qwen/QwQ-32B"
 
 def run_tests():
     """Run the tests for the GonkaOpenAI library."""
@@ -64,6 +68,7 @@ def run_tests():
             api_key="mock-api-key",
             gonka_private_key=os.environ.get('GONKA_PRIVATE_KEY'),
             http_client=test_client,
+            endpoints=get_endpoints_from_env_or_default()
         )
         
         print(f"Gonka Address: {gonka_client.gonka_address}")
@@ -71,7 +76,7 @@ def run_tests():
         # Make a chat completion request
         print("\nSending first request...")
         chat_response = gonka_client.chat.completions.create(
-            model="Qwen/QwQ-32B",
+            model=default_model,
             messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
         )
         
@@ -84,20 +89,21 @@ def run_tests():
         # Create a custom HTTP client for the OpenAI client
         http_client = gonka_http_client(
             private_key=os.environ.get('GONKA_PRIVATE_KEY'),
-            http_client=test_client
+            http_client=test_client,
+            transfer_address=selected_url.address
         )
         
         # Create a standard OpenAI client with the custom HTTP client
         openai_client = OpenAI(
             api_key="mock-api-key",
-            base_url=selected_url,
+            base_url=selected_url.url,
             http_client=http_client
         )
         
         # Make a request with the standard client
         print("\nSending request with standard client + custom HTTP client...")
         standard_response = openai_client.chat.completions.create(
-            model="Qwen/QwQ-32B",
+            model=default_model,
             messages=[{"role": "user", "content": "What is the capital of France?"}],
         )
         
@@ -119,7 +125,7 @@ mock_response_data = {
     "id": "mock-completion-id",
     "object": "chat.completion",
     "created": 1683720588,
-    "model": "Qwen/QwQ-32B",
+    "model": default_model,
     "choices": [
         {
             "message": {

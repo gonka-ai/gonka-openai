@@ -4,20 +4,33 @@ import secp256k1 from 'secp256k1';
 import { ENV, DEFAULT_ENDPOINTS, GONKA_CHAIN_ID } from './constants.js';
 import { EndpointSelectionFunction } from './types.js';
 
+import { GonkaEndpoint } from './types.js';
+
 /**
  * Get a random endpoint from the list of available endpoints
  * 
  * @param endpoints Optional list of endpoints to choose from
  * @returns A randomly selected endpoint
  */
-export const gonkaBaseURL = (endpoints?: string[]): string => {
+export const gonkaBaseURL = (endpoints?: GonkaEndpoint[]): GonkaEndpoint => {
   // Try to get endpoints from arguments, environment, or default to hardcoded values
   let endpointList = endpoints || [];
   
   if (endpointList.length === 0) {
     const envEndpoints = process.env[ENV.ENDPOINTS];
     if (envEndpoints) {
-      endpointList = envEndpoints.split(',').map((e: string) => e.trim());
+      // Parse semicolon-separated pairs of URL and address
+      endpointList = envEndpoints.split(',').map((e: string) => {
+        const parts = e.trim().split(';');
+        if (parts.length !== 2) {
+          throw new Error(`Invalid endpoint format: ${e}. Expected format: "url;transferAddress"`);
+        }
+
+        return {
+          url: parts[0],
+          transferAddress: parts[1]
+        };
+      });
     } else {
       endpointList = DEFAULT_ENDPOINTS;
     }
@@ -37,15 +50,25 @@ export const gonkaBaseURL = (endpoints?: string[]): string => {
  */
 export const customEndpointSelection = (
   endpointSelectionStrategy: EndpointSelectionFunction,
-  endpoints?: string[]
-): string => {
+  endpoints?: GonkaEndpoint[]
+): GonkaEndpoint => {
   // Get the list of endpoints
   let endpointList = endpoints || [];
   
   if (endpointList.length === 0) {
     const envEndpoints = process.env[ENV.ENDPOINTS];
     if (envEndpoints) {
-      endpointList = envEndpoints.split(',').map((e: string) => e.trim());
+      // Parse semicolon-separated pairs of URL and address
+      endpointList = envEndpoints.split(',').map((e: string) => {
+        const parts = e.trim().split(';');
+        if (parts.length !== 2) {
+          throw new Error(`Invalid endpoint format: ${e}. Expected format: "url;transferAddress"`);
+        }
+        return {
+          url: parts[0],
+          transferAddress: parts[1]
+        };
+      });
     } else {
       endpointList = DEFAULT_ENDPOINTS;
     }
@@ -55,14 +78,74 @@ export const customEndpointSelection = (
   return endpointSelectionStrategy(endpointList);
 };
 
+import { SignatureComponents } from './types.js';
+
+/**
+ * Get the bytes to sign from the signature components
+ * 
+ * @param components The signature components
+ * @returns The bytes to sign
+ */
+export const getSigBytes = (components: SignatureComponents): Uint8Array => {
+  // Convert payload to bytes if needed
+  let payloadBytes;
+  if (typeof components.payload === 'string') {
+    payloadBytes = Buffer.from(components.payload);
+  } else if (Buffer.isBuffer(components.payload)) {
+    payloadBytes = components.payload;
+  } else if (components.payload instanceof Uint8Array) {
+    payloadBytes = Buffer.from(components.payload);
+  } else {
+    // For objects or other types, stringify and convert to bytes
+    payloadBytes = Buffer.from(JSON.stringify(components.payload));
+  }
+  
+  // Convert timestamp to string and then to bytes
+  const timestampBytes = Buffer.from(components.timestamp.toString());
+  
+  // Convert transfer address to bytes
+  const transferAddressBytes = Buffer.from(components.transferAddress);
+  
+  // Concatenate all bytes
+  const messageBytes = Buffer.concat([
+    payloadBytes,
+    timestampBytes,
+    transferAddressBytes
+  ]);
+  
+  return messageBytes;
+};
+
+/**
+ * Get current timestamp in nanoseconds
+ * 
+ * @returns Current timestamp in nanoseconds as a bigint
+ */
+/**
+ * Get current timestamp in nanoseconds since Unix epoch
+ *
+ * @returns Current timestamp in nanoseconds since Unix epoch
+ */
+export const getNanoTimestamp = (): bigint => {
+  // Get milliseconds since epoch and convert to nanoseconds
+  const millisSinceEpoch = BigInt(Date.now());
+  const nanosSinceEpoch = millisSinceEpoch * 1000000n;
+
+  // Add high-resolution nanoseconds for sub-millisecond precision
+  const hrTime = process.hrtime();
+  const subMillisecondNanos = BigInt(hrTime[1] % 1000000);
+
+  return nanosSinceEpoch + subMillisecondNanos;
+};
+
 /**
  * Sign a request body with a private key using ECDSA
  * 
- * @param body The request body to sign
+ * @param components The signature components (payload, timestamp, transferAddress)
  * @param privateKeyHex The private key in hex format (with or without 0x prefix)
  * @returns The signature as a base64 string
  */
-export const gonkaSignature = async (body: any, privateKeyHex: string): Promise<string> => {
+export const gonkaSignature = async (components: SignatureComponents, privateKeyHex: string): Promise<string> => {
   // Remove 0x prefix if present
   const privateKeyClean = privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex;
   
@@ -71,18 +154,8 @@ export const gonkaSignature = async (body: any, privateKeyHex: string): Promise<
     privateKeyClean.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []
   );
 
-  // Convert body to bytes if needed
-  let messageBytes;
-  if (typeof body === 'string') {
-    messageBytes = Buffer.from(body);
-  } else if (Buffer.isBuffer(body)) {
-    messageBytes = body;
-  } else if (body instanceof Uint8Array) {
-    messageBytes = Buffer.from(body);
-  } else {
-    // For objects or other types, stringify and convert to bytes
-    messageBytes = Buffer.from(JSON.stringify(body));
-  }
+  // Get the bytes to sign
+  const messageBytes = getSigBytes(components);
   
   // Hash the payload with SHA-256 using Node.js crypto
   const messageHash = sha256(messageBytes);
@@ -165,11 +238,64 @@ export const gonkaFetch = (
       requestInit.headers.set('X-Requester-Address', address);
     }
     
+    // Get the URL string from the URL object
+    const urlString = url instanceof URL ? url.toString() : url.toString();
+    
+    // Extract the endpoint from the URL
+    let selectedEndpoint: GonkaEndpoint | undefined;
+    
+    // Try to find the endpoint in the DEFAULT_ENDPOINTS
+    for (const endpoint of DEFAULT_ENDPOINTS) {
+      if (urlString.startsWith(endpoint.url)) {
+        selectedEndpoint = endpoint;
+        break;
+      }
+    }
+    
+    // If endpoint not found in DEFAULT_ENDPOINTS, try to parse from environment
+    let endpoints = process.env[ENV.ENDPOINTS];
+    if (!selectedEndpoint && endpoints) {
+      const envEndpoints = endpoints.split(',').map((e: string) => {
+        const parts = e.trim().split(';');
+        if (parts.length !== 2) {
+          return null;
+        }
+        return {
+          url: parts[0],
+          transferAddress: parts[1]
+        };
+      }).filter(Boolean) as GonkaEndpoint[];
+      
+      for (const endpoint of envEndpoints) {
+        if (urlString.startsWith(endpoint.url)) {
+          selectedEndpoint = endpoint;
+          break;
+        }
+      }
+    }
+    
+    // If no endpoint found, throw an error
+    if (!selectedEndpoint) {
+      throw new Error(`Could not determine the endpoint for URL: ${urlString}`);
+    }
+    
+    // Generate a unique timestamp in nanoseconds
+    const timestamp = getNanoTimestamp();
+    // Add the X-Timestamp header
+    requestInit.headers.set('X-Timestamp', timestamp.toString());
+    
     // If there's a body, sign it and add the signature to the Authorization header
     if (requestInit.body) {
-      try {        
-        // Sign the body
-        const signature = await gonkaSignature(requestInit.body, privateKey);
+      try {
+        // Create signature components
+        const components: SignatureComponents = {
+          payload: requestInit.body,
+          timestamp: timestamp,
+          transferAddress: selectedEndpoint.transferAddress
+        };
+        
+        // Sign the components
+        const signature = await gonkaSignature(components, privateKey);
         
         // Add the signature to the Authorization header
         requestInit.headers.set('Authorization', signature);
@@ -186,4 +312,4 @@ export const gonkaFetch = (
     // Call the original fetch with the modified request
     return originalFetch(url, requestInit);
   };
-}; 
+};

@@ -18,19 +18,28 @@ There are two ways to use this library:
 
 ```python
 from gonka_openai import GonkaOpenAI
+from gonka_openai.utils import Endpoint
+
+# Create endpoints directly
+endpoints = [
+    Endpoint(url="https://api.gonka.testnet.example.com", address="gonka1transferaddress"),
+    Endpoint(url="https://api2.gonka.testnet.example.com", address="gonka2transferaddress")
+]
 
 # Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
 client = GonkaOpenAI(
+    api_key="mock-api-key",  # OpenAI requires any key, defaults to "mock-api-key" if not provided
     gonka_private_key="0x1234...",  # ECDSA private key for signing requests
-    endpoints=["https://gonka1.example.com/v1"],  # Gonka endpoints
+    endpoints=endpoints,  # Pass in the endpoints directly
     # Optional parameters:
     # gonka_address="cosmos1...",  # Override derived Cosmos address
+    # http_client=custom_client,  # Optional custom HTTP client
 )
 
 # Use exactly like the original OpenAI client
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
-    messages=[{"role": "user", "content": "Hello!"}],
+    model="unsloth/llama-3-8b-Instruct",
+    messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
 )
 ```
 
@@ -38,25 +47,35 @@ response = client.chat.completions.create(
 
 ```python
 from openai import OpenAI
-from gonka_openai import gonka_base_url, gonka_http_client
+from gonka_openai import gonka_http_client
+from gonka_openai.utils import Endpoint
+
+# Create an endpoint directly
+endpoint = Endpoint(
+    url="https://api.gonka.testnet.example.com",
+    address="gonka1transferaddress"
+)
 
 # Create a custom HTTP client for Gonka with your private key
 http_client = gonka_http_client(
     private_key="0x1234...",  # Your private key
-    address="cosmos1..."  # Optional address, will derive from private key if not provided
+    # Optional parameters:
+    # address="cosmos1...",  # Optional address, will derive from private key if not provided
+    # http_client=custom_client,  # Optional custom HTTP client
+    transfer_address=endpoint.address  # Transfer address from the endpoint
 )
 
 # Create an OpenAI client with the custom HTTP client
 client = OpenAI(
-    api_key="mock-api-key", # OpenAI requires any key
-    base_url=gonka_base_url(endpoints=["https://gonka1.example.com/v1"]),  # Use Gonka network endpoints
+    api_key="mock-api-key",  # OpenAI requires any key
+    base_url=endpoint.url,  # Use the URL from the endpoint
     http_client=http_client  # Use the custom HTTP client that signs requests
 )
 
 # Use normally - all requests will be dynamically signed and routed through Gonka
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
-    messages=[{"role": "user", "content": "Hello!"}],
+    model="unsloth/llama-3-8b-Instruct",
+    messages=[{"role": "user", "content": "What is the capital of France?"}],
 )
 ```
 
@@ -68,14 +87,14 @@ Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
 - `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
-- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints
+- `GONKA_ENDPOINTS`: Comma-separated list of Gonka network endpoints in the format "url;address" where address is the Cosmos address of the provider at that endpoint (e.g., "https://gonka1.example.com;gonka1address"). Each endpoint MUST include a transfer address.
 
 Example with environment variables:
 
 ```python
 # Set in your environment:
 # GONKA_PRIVATE_KEY=0x1234...
-# GONKA_ENDPOINTS=https://gonka1.example.com,https://gonka2.example.com
+# GONKA_ENDPOINTS=https://gonka1.example.com;gonka1address,https://gonka2.example.com;gonka2address
 
 from gonka_openai import GonkaOpenAI
 
@@ -99,6 +118,13 @@ You can provide a custom endpoint selection strategy:
 
 ```python
 from gonka_openai import GonkaOpenAI
+from gonka_openai.utils import Endpoint
+
+# Create endpoints directly
+endpoints = [
+    Endpoint(url="https://api.gonka.testnet.example.com", address="gonka1transferaddress"),
+    Endpoint(url="https://api2.gonka.testnet.example.com", address="gonka2transferaddress")
+]
 
 def first_endpoint_strategy(endpoints):
     """Always select the first endpoint."""
@@ -107,7 +133,14 @@ def first_endpoint_strategy(endpoints):
 client = GonkaOpenAI(
     api_key="mock-api-key",
     gonka_private_key="0x1234...",
+    endpoints=endpoints,
     endpoint_selection_strategy=first_endpoint_strategy
+)
+
+# Use normally
+response = client.chat.completions.create(
+    model="unsloth/llama-3-8b-Instruct",
+    messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
 )
 ```
 
@@ -116,10 +149,18 @@ client = GonkaOpenAI(
 1. **Custom HTTP Client**: The library intercepts all outgoing API requests by wrapping the HTTP client's request method
 2. **Request Body Signing**: For each request, the library:
    - Extracts the request body
-   - Signs it with your private key using ECDSA
+   - Generates a hybrid timestamp in nanoseconds (required for all requests)
+     - Uses a combination of wall clock time and performance counter
+     - Ensures timestamps are unique and monotonically increasing
+     - Maintains accuracy to standard time servers within at least 30 seconds
+   - Concatenates the request body, timestamp, and transfer address
+   - Signs the concatenated data with your private key using ECDSA
    - Adds the signature to the `Authorization` header
-3. **Address Generation**: Your Cosmos address (derived from your private key) is added to the `X-Requester-Address` header
+3. **Headers**: The library adds the following headers to each request:
+   - `X-Requester-Address`: Your Cosmos address (derived from your private key)
+   - `X-Timestamp`: The timestamp in nanoseconds used for signing (required for all requests)
 4. **Endpoint Selection**: Requests are routed to the Gonka network using a randomly selected endpoint
+5. **Transfer Address**: Each endpoint MUST include a transfer address (the Cosmos address of the provider at that endpoint). This is a required parameter for all requests and will cause requests to fail if not provided.
 
 ## Cryptographic Implementation
 

@@ -8,7 +8,26 @@ import random
 import hashlib
 import base64
 import logging
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple
+import time
+from typing import Any, Callable, Dict, List, Optional, Union, Tuple, NamedTuple
+from dataclasses import dataclass
+
+# Initialize base values for hybrid timestamp generation
+_wall_base = time.time_ns()
+_perf_base = time.perf_counter_ns()
+
+def hybrid_timestamp_ns():
+    """
+    Generate a hybrid timestamp in nanoseconds that combines wall clock time with a performance counter.
+    
+    This approach ensures:
+    1. Timestamps are unique and monotonically increasing (never go backwards)
+    2. Timestamps remain accurate to standard time servers (assuming system wall time is accurate)
+    
+    Returns:
+        A unique timestamp in nanoseconds
+    """
+    return _wall_base + (time.perf_counter_ns() - _perf_base)
 
 # Import necessary libraries for OpenAI client
 from openai import DefaultHttpxClient
@@ -23,11 +42,61 @@ from ecdsa import SigningKey, SECP256k1, util
 
 from .constants import ENV, DEFAULT_ENDPOINTS, GONKA_CHAIN_ID
 
+@dataclass
+class Endpoint:
+    """
+    Represents a Gonka endpoint with URL and transfer address.
+    """
+    url: str
+    address: str
+    
+    @classmethod
+    def parse(cls, endpoint_str: str) -> 'Endpoint':
+        """
+        Parse an endpoint string in the format 'url;address'.
+        
+        Args:
+            endpoint_str: String in the format 'url;address'
+            
+        Returns:
+            Endpoint object
+            
+        Raises:
+            ValueError: If no transfer address is provided
+        """
+        parts = endpoint_str.split(';', 1)
+        if len(parts) == 2:
+            url = parts[0].strip()
+            address = parts[1].strip()
+            if not address:
+                raise ValueError("Transfer address is required and cannot be empty")
+            return cls(url=url, address=address)
+        raise ValueError("Endpoint must be in the format 'url;address'")
+
 # Configure logger
 logger = logging.getLogger("gonka")
 logging.basicConfig(level=logging.INFO)
 
-def gonka_base_url(endpoints: Optional[List[str]] = None) -> str:
+def get_endpoints_from_env_or_default() -> List[Endpoint]:
+    """
+    Get a list of parsed endpoints from the environment variable or default values.
+
+    Returns:
+        List of Endpoint objects
+
+    Raises:
+        ValueError: If no valid endpoints with transfer addresses are available
+    """
+    env_endpoints = os.environ.get(ENV.ENDPOINTS)
+    if env_endpoints:
+        # Parse endpoints from environment variable
+        return [Endpoint.parse(e.strip()) for e in env_endpoints.split(',')]
+    else:
+        # Use default endpoints which must include transfer addresses
+        return [Endpoint.parse(endpoint) for endpoint in DEFAULT_ENDPOINTS]
+
+
+def gonka_base_url(endpoints: Optional[List[Endpoint]] = None) -> Endpoint:
     """
     Get a random endpoint from the list of available endpoints.
     
@@ -35,26 +104,21 @@ def gonka_base_url(endpoints: Optional[List[str]] = None) -> str:
         endpoints: Optional list of endpoints to choose from
         
     Returns:
-        A randomly selected endpoint
+        A randomly selected Endpoint object
+        
+    Raises:
+        ValueError: If no valid endpoints with transfer addresses are available
     """
     # Try to get endpoints from arguments, environment, or default to hardcoded values
-    endpoint_list = endpoints or []
-    
-    if not endpoint_list:
-        env_endpoints = os.environ.get(ENV.ENDPOINTS)
-        if env_endpoints:
-            endpoint_list = [e.strip() for e in env_endpoints.split(',')]
-        else:
-            endpoint_list = DEFAULT_ENDPOINTS
-    
+    endpoint_list = endpoints or get_endpoints_from_env_or_default()
     # Select a random endpoint
     return random.choice(endpoint_list)
 
 
 def custom_endpoint_selection(
-    endpoint_selection_strategy: Callable[[List[str]], str],
-    endpoints: Optional[List[str]] = None
-) -> str:
+    endpoint_selection_strategy: Callable[[List[Endpoint]], Endpoint],
+    endpoints: Optional[List[Endpoint]] = None
+) -> Endpoint:
     """
     Custom endpoint selection strategy.
     
@@ -63,33 +127,37 @@ def custom_endpoint_selection(
         endpoints: Optional list of endpoints to choose from
         
     Returns:
-        The selected endpoint
+        The selected Endpoint object
+        
+    Raises:
+        ValueError: If no valid endpoints with transfer addresses are available
     """
     # Get the list of endpoints
-    endpoint_list = endpoints or []
-    
-    if not endpoint_list:
-        env_endpoints = os.environ.get(ENV.ENDPOINTS)
-        if env_endpoints:
-            endpoint_list = [e.strip() for e in env_endpoints.split(',')]
-        else:
-            endpoint_list = DEFAULT_ENDPOINTS
-    
-    # Use the provided strategy to select an endpoint
+    endpoint_list = endpoints or get_endpoints_from_env_or_default()
+
     return endpoint_selection_strategy(endpoint_list)
 
 
-def gonka_signature(body: Any, private_key_hex: str) -> str:
+def gonka_signature(body: Any, private_key_hex: str, timestamp: int, transfer_address: str) -> str:
     """
     Sign a request body with a private key using ECDSA (secp256k1).
     
     Args:
         body: The request body to sign
         private_key_hex: The private key in hex format (with or without 0x prefix)
+        timestamp: Timestamp in nanoseconds
+        transfer_address: The transfer address to include in the signature
         
     Returns:
         The signature as a base64 string
+        
+    Raises:
+        ValueError: If timestamp is not provided or transfer_address is empty
     """
+    # Validate required parameters
+    if not transfer_address:
+        raise ValueError("Transfer address is required and cannot be empty")
+    
     # Remove 0x prefix if present
     private_key_clean = private_key_hex[2:] if private_key_hex.startswith('0x') else private_key_hex
     
@@ -108,14 +176,19 @@ def gonka_signature(body: Any, private_key_hex: str) -> str:
     
     # Convert body to bytes if it's not already
     if isinstance(body, dict):
-        message_bytes = json.dumps(body).encode('utf-8')
+        payload_bytes = json.dumps(body).encode('utf-8')
     elif isinstance(body, str):
-        message_bytes = body.encode('utf-8')
+        payload_bytes = body.encode('utf-8')
     elif isinstance(body, bytes):
-        message_bytes = body
+        payload_bytes = body
     else:
         raise TypeError(f"Unsupported body type: {type(body)}. Must be dict, str, or bytes.")
     
+    # Create message payload by concatenating components as described in the issue
+    message_bytes = payload_bytes
+    message_bytes += str(timestamp).encode('utf-8')
+    message_bytes += transfer_address.encode('utf-8')
+
     # Sign the message with deterministic ECDSA using our custom encoder
     signature = signing_key.sign_deterministic(
         message_bytes,
@@ -175,6 +248,7 @@ def gonka_http_client(
     private_key: str,
     address: Optional[str] = None,
     http_client: Optional[httpx.Client] = None,
+    transfer_address: Optional[str] = None,
 ) -> httpx.Client:
     """
     Create a custom HTTP client for OpenAI that signs requests with your private key.
@@ -183,9 +257,13 @@ def gonka_http_client(
         private_key: ECDSA private key for signing requests
         address: Optional Cosmos address to use instead of deriving from private key
         http_client: Optional base HTTP client
+        transfer_address: Optional transfer address for signing requests
         
     Returns:
         A custom HTTP client compatible with the OpenAI client
+        
+    Raises:
+        ValueError: If private key is not provided or if no valid transfer address is available
     """
     
     # Use provided private key or fail
@@ -198,6 +276,16 @@ def gonka_http_client(
     # Derive address if not provided
     resolved_address = address or gonka_address(private_key)
     
+    # Get the endpoint with transfer address
+    endpoint = gonka_base_url()
+    
+    # Use provided transfer address or get it from the endpoint
+    resolved_transfer_address = transfer_address or endpoint.address
+    
+    # Validate that we have a transfer address
+    if not resolved_transfer_address:
+        raise ValueError("Transfer address is required and must be provided either directly or through an endpoint")
+    
     # Wrap the send method to add headers
     original_send = client.send
     
@@ -209,10 +297,22 @@ def gonka_http_client(
         if request.headers is None:
             request.headers = {}
         
+        # Generate unique and accurate timestamp in nanoseconds
+        timestamp = hybrid_timestamp_ns()
+        
         # Add X-Requester-Address header
         request.headers['X-Requester-Address'] = resolved_address
         
-        signature = gonka_signature(request.content, private_key)
+        # Add X-Timestamp header
+        request.headers['X-Timestamp'] = str(timestamp)
+        
+        # Sign the request with timestamp and transfer address
+        signature = gonka_signature(
+            request.content, 
+            private_key, 
+            timestamp, 
+            resolved_transfer_address
+        )
         request.headers['Authorization'] = signature
 
         response = original_send(request, *args, **kwargs)
@@ -221,4 +321,4 @@ def gonka_http_client(
     # Replace the client's send method with the wrapped version
     client.send = wrapped_send
     
-    return client 
+    return client

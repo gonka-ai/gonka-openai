@@ -20,9 +20,14 @@ import { GonkaOpenAI } from 'gonka-openai';
 // Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
 const client = new GonkaOpenAI({
   gonkaPrivateKey: '0x1234...', // ECDSA private key for signing requests
-  endpoints: ['https://gonka1.example.com/v1'], // Gonka endpoints
+  endpoints: [
+    {
+      url: 'https://gonka1.example.com/v1',
+      transferAddress: 'gonka1...' // gonka address of the endpoint provider
+    }
+  ], // Gonka endpoints with transfer addresses
   // Optional parameters:
-  // gonkaAddress: 'cosmos1...', // Override derived Cosmos address
+  // gonkaAddress: 'gonka1...', // Override derived gonka address
 });
 
 // Use exactly like the original OpenAI client
@@ -43,10 +48,18 @@ const fetch = gonkaFetch({
   gonkaPrivateKey: '0x1234...' // Your private key
 });
 
+// Define endpoints with transfer addresses
+const endpoints = [
+  {
+    url: 'https://gonka1.example.com/v1',
+    transferAddress: 'gonka1...' // gonka address of the endpoint provider
+  }
+];
+
 // Create an OpenAI client with the custom fetch function
 const client = new OpenAI({
   apiKey: 'mock-api-key', // OpenAI requires any key
-  baseURL: gonkaBaseURL(endpoints: ['https://gonka1.example.com/v1']), // Use Gonka network endpoints 
+  baseURL: gonkaBaseURL(endpoints).url, // Use Gonka network endpoints 
   fetch: fetch // Use the custom fetch function that signs requests
 });
 
@@ -64,15 +77,15 @@ This approach provides the same dynamic request signing as Option 1, but gives y
 Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
-- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints
-- `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
+- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their transfer addresses. Each endpoint is specified as `url;transferAddress` (semicolon-separated pair).
+- `GONKA_ADDRESS`: (Optional) Override the derived gonka address
 
 Example with environment variables:
 
 ```typescript
 // Set in your environment:
 // GONKA_PRIVATE_KEY=0x1234...
-// GONKA_ENDPOINTS=https://gonka1.example.com/v1,https://gonka2.example.com/v1
+// GONKA_ENDPOINTS=https://gonka1.example.com/v1;gonka1address1,https://gonka2.example.com/v1;gonka1address2
 
 import { GonkaOpenAI } from 'gonka-openai';
 
@@ -100,11 +113,42 @@ import { GonkaOpenAI } from 'gonka-openai';
 const client = new GonkaOpenAI({
   apiKey: 'mock-api-key',
   gonkaPrivateKey: '0x1234...',
+  endpoints: [
+    {
+      url: 'https://gonka1.example.com/v1',
+      transferAddress: 'gonka1address1'
+    },
+    {
+      url: 'https://gonka2.example.com/v1',
+      transferAddress: 'gonka1address2'
+    }
+  ],
   endpointSelectionStrategy: (endpoints) => {
     // Custom selection logic
+    // Each endpoint has url and transferAddress properties
+    console.log(`Selecting from ${endpoints.length} endpoints`);
     return endpoints[0]; // Always use the first endpoint
   }
 });
+```
+
+## TransferAddress Requirement
+
+Each endpoint in the Gonka network requires a **TransferAddress**, which is the gonka address of the endpoint provider. This address is essential for the request signing process and cannot be omitted.
+
+- The TransferAddress is used as part of the signature payload, along with the request body and a timestamp
+- It identifies the provider of the endpoint you're connecting to
+- Without a valid TransferAddress, requests will fail
+
+When specifying endpoints, always include both the URL and the TransferAddress:
+
+```typescript
+const endpoints = [
+  {
+    url: 'https://gonka1.example.com/v1',
+    transferAddress: 'gonka1...' // gonka address of the endpoint provider
+  }
+];
 ```
 
 ## How It Works
@@ -112,9 +156,12 @@ const client = new GonkaOpenAI({
 1. **Custom Fetch Implementation**: The library intercepts all outgoing API requests by providing a custom `fetch` implementation to the OpenAI client
 2. **Request Body Signing**: For each request, the library:
    - Extracts the request body
-   - Signs it with your private key using ECDSA
+   - Generates a unique timestamp in nanoseconds
+   - Concatenates the request body, timestamp, and TransferAddress
+   - Signs the combined data with your private key using ECDSA
    - Adds the signature to the `Authorization` header
-3. **Address Generation**: Your Cosmos address (derived from your private key) is added to the `X-Requester-Address` header
+   - Adds the timestamp to the `X-Timestamp` header
+3. **Address Generation**: Your gonka address (derived from your private key) is added to the `X-Requester-Address` header
 4. **Endpoint Selection**: Requests are routed to the Gonka network using a randomly selected endpoint
 
 ## Cryptographic Implementation
@@ -122,7 +169,7 @@ const client = new GonkaOpenAI({
 The library implements:
 
 1. **ECDSA Signatures**: Using Secp256k1 curve to sign request bodies with the private key
-2. **Gonka Address Generation**: Deriving Cosmos-compatible addresses from private keys
+2. **Gonka Address Generation**: Deriving gonka-compatible addresses from private keys
 3. **Dynamic Request Signing**: Using a custom fetch implementation to intercept and sign each request before it's sent
 
 ## Building from Source

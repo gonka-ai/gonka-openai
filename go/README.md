@@ -23,10 +23,11 @@ import (
 )
 
 func main() {
-    // Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
+    // Private key and SourceUrl can be provided directly or through environment variables
+    // GONKA_PRIVATE_KEY and GONKA_SOURCE_URL respectively
     client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
         GonkaPrivateKey: "0x1234...", // ECDSA private key for signing requests
-        Endpoints: []string{"https://gonka1.example.com/v1"}, // Gonka endpoints
+        SourceUrl: "https://api.gonka.testnet.example.com", // URL to fetch endpoints from
         // Optional parameters:
         // GonkaAddress: "cosmos1...", // Override derived Cosmos address
     })
@@ -61,13 +62,27 @@ import (
 )
 
 func main() {
-    httpClient := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+    // You can use SourceUrl directly in GonkaHTTPClient
+    sourceUrl := "https://api.gonka.testnet.example.com"
+    
+    // GonkaHTTPClient will fetch endpoints from SourceUrl
+    httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
         PrivateKey: "0x1234...",
+        SourceUrl:  sourceUrl, // URL to fetch endpoints from
     })
+    if err != nil {
+        panic(err)
+    }
+    
+    // Get endpoints for baseURL
+    endpoints, err := gonkaopenai.GetParticipantsWithProof(context.Background(), sourceUrl, "current")
+    if err != nil {
+        panic(err)
+    }
 
     client := openai.NewClient(
         option.WithAPIKey("mock-api-key"), // OpenAI requires any key
-        option.WithBaseURL(gonkaopenai.GonkaBaseURL([]string{"https://gonka1.example.com/v1"})),
+        option.WithBaseURL(gonkaopenai.GonkaBaseURL(endpoints)), // Randomly selects an endpoint URL
         option.WithHTTPClient(httpClient),
     )
 
@@ -93,22 +108,66 @@ Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
 - `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
-- `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints
+- `GONKA_SOURCE_URL`: (Optional) URL to fetch endpoints from
 
 ## Advanced Configuration
 
 ### Custom Endpoint Selection
 
-You can provide a custom endpoint selection strategy:
+You can provide a custom endpoint selection strategy for the endpoints fetched from `SourceUrl`:
 
 ```go
 client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
     GonkaPrivateKey: "0x1234...",
-    EndpointSelectionStrategy: func(endpoints []string) string {
-        return endpoints[0] // Always select the first
+    SourceUrl: "https://api.gonka.testnet.example.com",
+    EndpointSelectionStrategy: func(endpoints []gonkaopenai.Endpoint) string {
+        return endpoints[0].URL // Always select the first endpoint's URL
     },
 })
 ```
+
+Note: The `EndpointSelectionStrategy` field is deprecated but still functional. It will be applied to the endpoints fetched from `SourceUrl`.
+
+### Endpoint Configuration
+
+Endpoints are now exclusively fetched from the `SourceUrl` parameter using the `GetParticipantsWithProof` function. This ensures that all endpoints are properly verified and authenticated.
+
+You can either:
+
+1. Fetch endpoints yourself and pass them to `GonkaHTTPClient`:
+
+```go
+// Get endpoints from SourceUrl
+sourceUrl := "https://api.gonka.testnet.example.com"
+endpoints, err := gonkaopenai.GetParticipantsWithProof(context.Background(), sourceUrl, "current")
+if err != nil {
+    panic(err)
+}
+
+// Use with GonkaHTTPClient directly
+httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+    PrivateKey: "0x1234...",
+    Endpoints:  endpoints,
+})
+if err != nil {
+    panic(err)
+}
+```
+
+2. Or let `GonkaHTTPClient` fetch the endpoints for you using `SourceUrl`:
+
+```go
+// Let GonkaHTTPClient fetch endpoints for you
+httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
+    PrivateKey: "0x1234...",
+    SourceUrl:  "https://api.gonka.testnet.example.com", // URL to fetch endpoints from
+})
+if err != nil {
+    panic(err)
+}
+```
+
+Both approaches ensure that each request is signed with the appropriate provider address for the endpoint it's targeting, and that all endpoints are properly verified.
 
 ## Building from Source
 
@@ -124,7 +183,7 @@ A simple example program is provided in `test.go`:
 
 ```bash
 cd go
-go run ./test.go
+go run ./example_test.go
 ```
 
 ## License
