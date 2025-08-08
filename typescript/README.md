@@ -66,9 +66,10 @@ This approach provides the same dynamic request signing as Option 1, but gives y
 Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
+- `GONKA_SOURCE_URL`: (Optional) Participants discovery URL. Note: used by the resolver helpers (`resolveEndpoints`, `resolveAndSelectEndpoint`); the class constructor does not resolve it automatically.
+- `GONKA_VERIFY_PROOF`: (Optional) Set to `1` to enable ICS23 proof verification during endpoint discovery. If unset, verification is skipped by default.
 - `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their transfer addresses. Each endpoint is specified as `url;transferAddress` (semicolon-separated pair).
 - `GONKA_ADDRESS`: (Optional) Override the derived gonka address
-- `GONKA_SOURCE_URL`: (Optional) Participants discovery URL. Note: used by the resolver helpers (`resolveEndpoints`, `resolveAndSelectEndpoint`); the class constructor does not resolve it automatically.
 
 Example with environment variables:
 

@@ -54,7 +54,7 @@ export const getParticipantsWithProof = async (sourceUrl: string, epoch: string)
   });
   if (!res.ok) throw new Error(`failed to fetch participants: ${res.status}`);
   const payload = await res.json();
-  return getParticipantsWithProofFromPayload(payload, process.env['GONKA_VERIFY_PROOF'] !== '0');
+  return getParticipantsWithProofFromPayload(payload, process.env['GONKA_VERIFY_PROOF'] === '1');
 };
 
 /**

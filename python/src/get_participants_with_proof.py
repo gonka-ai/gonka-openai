@@ -62,7 +62,7 @@ def get_participants_with_proof_from_file(file_path: str) -> List[Endpoint]:
 
 def _process_payload(payload: dict) -> List[Endpoint]:
     # Env toggle: if GONKA_VERIFY_PROOF=0, skip ICS23 verification and do light parsing
-    verify = os.environ.get("GONKA_VERIFY_PROOF") != "0"
+    verify = os.environ.get("GONKA_VERIFY_PROOF") == "1"
 
     def _ensure_v1(url: str) -> str:
         if not url:

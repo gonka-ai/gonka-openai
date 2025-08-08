@@ -62,7 +62,7 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	verify := os.Getenv("GONKA_VERIFY_PROOF") != "0"
+	verify := os.Getenv("GONKA_VERIFY_PROOF") == "1"
 
 	var endpoints []Endpoint
 	if verify {
