@@ -115,6 +115,43 @@ def gonka_base_url(endpoints: Optional[List[Endpoint]] = None) -> Endpoint:
     return random.choice(endpoint_list)
 
 
+def resolve_endpoints(source_url: Optional[str] = None, endpoints: Optional[List[Endpoint]] = None) -> List[Endpoint]:
+    """
+    Resolve endpoints using SourceUrl first, then provided list, then env/defaults.
+
+    Args:
+        source_url: Optional SourceUrl for participants discovery
+        endpoints: Optional explicit endpoints list
+
+    Returns:
+        List[Endpoint]
+    """
+    if source_url:
+        try:
+            # Local import to avoid circular dependency at module import time
+            from .get_participants_with_proof import get_participants_with_proof  # type: ignore
+            eps = get_participants_with_proof(source_url, "current")
+            if eps:
+                return eps
+        except Exception:
+            pass
+    if endpoints:
+        return endpoints
+    return get_endpoints_from_env_or_default()
+
+
+def resolve_and_select_endpoint(source_url: Optional[str] = None,
+                                endpoints: Optional[List[Endpoint]] = None,
+                                endpoint_selection_strategy: Optional[Callable[[List[Endpoint]], Endpoint]] = None) -> Tuple[List[Endpoint], Endpoint]:
+    """
+    Resolve endpoints then select one using optional strategy.
+    """
+    eps = resolve_endpoints(source_url=source_url, endpoints=endpoints)
+    if endpoint_selection_strategy:
+        return eps, endpoint_selection_strategy(eps)
+    return eps, gonka_base_url(eps)
+
+
 def custom_endpoint_selection(
     endpoint_selection_strategy: Callable[[List[Endpoint]], Endpoint],
     endpoints: Optional[List[Endpoint]] = None

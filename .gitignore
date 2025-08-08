@@ -1,0 +1,40 @@
+# OS / Editor
+.DS_Store
+.vscode/
+.idea/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Node / TypeScript
+node_modules/
+**/node_modules/
+typescript/dist/
+typescript/coverage/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+python/.venv/
+**/__pycache__/
+**/*.pyc
+python/build/
+python/dist/
+python/*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.python-version
+
+# Go
+*.out
+**/*.test
+**/bin/
+**/build/
+
+# Generic build artifacts
+build/
+dist/
+coverage/

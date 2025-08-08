@@ -27,9 +27,7 @@ func main() {
     // GONKA_PRIVATE_KEY and GONKA_SOURCE_URL respectively
     client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
         GonkaPrivateKey: "0x1234...", // ECDSA private key for signing requests
-        SourceUrl: "https://api.gonka.testnet.example.com", // URL to fetch endpoints from
-        // Optional parameters:
-        // GonkaAddress: "cosmos1...", // Override derived Cosmos address
+        SourceUrl: "https://api.gonka.testnet.example.com", // Resolve endpoints from this SourceUrl
     })
     if err != nil {
         panic(err)
@@ -68,7 +66,7 @@ func main() {
     // GonkaHTTPClient will fetch endpoints from SourceUrl
     httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
         PrivateKey: "0x1234...",
-        SourceUrl:  sourceUrl, // URL to fetch endpoints from
+        SourceUrl:  sourceUrl,
     })
     if err != nil {
         panic(err)

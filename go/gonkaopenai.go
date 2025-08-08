@@ -3,11 +3,12 @@ package gonkaopenai
 import (
 	"context"
 	"fmt"
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/option"
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 )
 
 // Endpoint represents a Gonka API endpoint with its associated transfer address
@@ -25,6 +26,7 @@ type Options struct {
 	HTTPClient                *http.Client
 	OrgID                     string
 	SourceUrl                 string
+	Endpoints                 []Endpoint
 }
 
 // GonkaOpenAI wraps the official openai.Client.
@@ -44,24 +46,30 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 		return nil, fmt.Errorf("private key must be provided via opts or %s", EnvPrivateKey)
 	}
 
-	// Get SourceUrl from options or environment variable
+	// Determine endpoints per priority:
+	// 1) SourceUrl in opts or env -> try fetch participants
+	// 2) If no endpoints from SourceUrl, use opts.Endpoints
+	// 3) If still none, try env GONKA_ENDPOINTS (via utils not available here; expect caller to provide)
 	sourceUrl := opts.SourceUrl
 	if sourceUrl == "" {
 		sourceUrl = os.Getenv(EnvSourceUrl)
 	}
-	if sourceUrl == "" {
-		return nil, fmt.Errorf("SourceUrl must be provided via opts or %s", EnvSourceUrl)
-	}
 
-	// Get endpoints using GetParticipantsWithProof
-	endpoints, err := GetParticipantsWithProof(context.Background(), sourceUrl, "current") // Using default epoch "current"
-	if err != nil {
-		return nil, fmt.Errorf("failed to get participants with proof: %w", err)
+	var endpoints []Endpoint
+	if sourceUrl != "" {
+		eps, err := GetParticipantsWithProof(context.Background(), sourceUrl, "current")
+		if err == nil && len(eps) > 0 {
+			endpoints = eps
+		}
 	}
-
-	// Ensure we got at least one endpoint
+	if len(endpoints) == 0 && len(opts.Endpoints) > 0 {
+		endpoints = opts.Endpoints
+	}
 	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints found from SourceUrl: %s", sourceUrl)
+		endpoints = GetEndpointsFromEnv()
+	}
+	if len(endpoints) == 0 {
+		return nil, fmt.Errorf("no endpoints resolved from SourceUrl, Options.Endpoints, or %s", EnvEndpoints)
 	}
 
 	// Validate that each endpoint has a non-empty address
@@ -100,7 +108,7 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	httpClient, err := GonkaHTTPClient(HTTPClientOptions{
 		PrivateKey: privateKey,
 		Address:    address,
-		Endpoints:  endpoints, // We already have endpoints from SourceUrl
+		Endpoints:  endpoints,
 		Client:     opts.HTTPClient,
 	})
 	if err != nil {

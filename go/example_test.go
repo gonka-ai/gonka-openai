@@ -2,12 +2,13 @@ package gonkaopenai_test
 
 import (
 	"context"
+	"os"
+	"testing"
+
 	gonkaopenai "github.com/gonka-ai/gonka-openai/go"
 	"github.com/joho/godotenv"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
-	"os"
-	"testing"
 )
 
 var defaultModel = "Qwen/QwQ-32B" // Default model for testing
@@ -25,8 +26,8 @@ func TestExampleUsage(t *testing.T) {
 
 	t.Log("\n------ Test Environment ------") // Use t.Log for test output
 
-	// Define a source URL for fetching endpoints
-	sourceUrl := "http://localhost:9000"
+	// Define a source URL for fetching endpoints from environment
+	sourceUrl := os.Getenv(gonkaopenai.EnvSourceUrl)
 	t.Log("Using Source URL:", sourceUrl)
 
 	// The APIKey is often a mock or test-specific key in test environments

@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+
 	cryptotypes "github.com/cometbft/cometbft/proto/tendermint/crypto"
 	"github.com/cosmos/gogoproto/proto"
 	ics23 "github.com/cosmos/ics23/go"
-	"net/http"
 )
 
 var ErrInvalidEpoch = errors.New("invalid epoch")
@@ -29,6 +32,7 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 	}
 
 	url := fmt.Sprintf("%s/v1/epochs/%v/participants", baseURL, epoch)
+	fmt.Println("url", url)
 
 	// Create a new HTTP request
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -52,33 +56,59 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 		return nil, fmt.Errorf("failed to fetch participants with proof: status code %d", resp.StatusCode)
 	}
 
-	// Decode the response
-	var participantResp ActiveParticipantWithProof
-	if err := json.NewDecoder(resp.Body).Decode(&participantResp); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	val, err := hex.DecodeString(participantResp.ActiveParticipantsBytes)
+	// Read response body so we can optionally avoid parsing block/proofs
+	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode participants bytes: %w", err)
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	err = VerifyIAVLProofAgainstAppHash(participantResp.Block.AppHash, participantResp.ProofOps.Ops, val)
-	if err != nil {
-		return nil, fmt.Errorf("failed to verify participants proof: %w", err)
-	}
+	verify := os.Getenv("GONKA_VERIFY_PROOF") != "0"
 
-	// Convert ActiveParticipants to Endpoints
-	endpoints := make([]Endpoint, 0, len(participantResp.ActiveParticipants.Participants))
-	for _, participant := range participantResp.ActiveParticipants.Participants {
+	var endpoints []Endpoint
+	if verify {
+		// Full decode with verification
+		var participantResp ActiveParticipantWithProof
+		if err := json.Unmarshal(bodyBytes, &participantResp); err != nil {
+			return nil, fmt.Errorf("failed to decode response: %w", err)
+		}
 
-		inferenceUrl := participant.InferenceUrl
-		endpoints = append(endpoints, Endpoint{
-			// Adding v1 is needed at the moment, as gonka APIs expect chats to hit v1/chat/completions,
-			// but openai clients do NOT att on the v1 automatically.
-			URL:     inferenceUrl + "/v1",
-			Address: participant.Index,
-		})
+		val, err := hex.DecodeString(participantResp.ActiveParticipantsBytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode participants bytes: %w", err)
+		}
+
+		if participantResp.Block == nil || participantResp.ProofOps == nil {
+			return nil, fmt.Errorf("missing block/proof in response while verification is enabled")
+		}
+		if err := VerifyIAVLProofAgainstAppHash(participantResp.Block.AppHash, participantResp.ProofOps.Ops, val); err != nil {
+			return nil, fmt.Errorf("failed to verify participants proof: %w", err)
+		}
+
+		// Map to endpoints
+		endpoints = make([]Endpoint, 0, len(participantResp.ActiveParticipants.Participants))
+		for _, participant := range participantResp.ActiveParticipants.Participants {
+			inferenceUrl := participant.InferenceUrl
+			endpoints = append(endpoints, Endpoint{
+				URL:     inferenceUrl + "/v1",
+				Address: participant.Index,
+			})
+		}
+	} else {
+		// Light decode: ignore block/proof, just participants
+		var light struct {
+			ActiveParticipants ActiveParticipants `json:"active_participants"`
+		}
+		if err := json.Unmarshal(bodyBytes, &light); err != nil {
+			return nil, fmt.Errorf("failed to decode response (light): %w", err)
+		}
+		endpoints = make([]Endpoint, 0, len(light.ActiveParticipants.Participants))
+		for _, participant := range light.ActiveParticipants.Participants {
+			inferenceUrl := participant.InferenceUrl
+			endpoints = append(endpoints, Endpoint{
+				URL:     inferenceUrl + "/v1",
+				Address: participant.Index,
+			})
+		}
 	}
 	return endpoints, nil
 }
