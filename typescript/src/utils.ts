@@ -260,28 +260,71 @@ export const getNanoTimestamp = (): bigint => {
  * @param privateKeyHex The private key in hex format (with or without 0x prefix)
  * @returns The signature as a base64 string
  */
+// TypeScript
 export const gonkaSignature = async (components: SignatureComponents, privateKeyHex: string): Promise<string> => {
   // Remove 0x prefix if present
   const privateKeyClean = privateKeyHex.startsWith('0x') ? privateKeyHex.slice(2) : privateKeyHex;
-  
+
   // Convert hex string to Uint8Array
   const privateKey = new Uint8Array(
-    privateKeyClean.match(/.{1,2}/g)?.map(byte => parseInt(byte, 16)) || []
+    privateKeyClean.match(/.{1,2}/g)?.map((byte) => parseInt(byte, 16)) || []
   );
 
   // Get the bytes to sign
   const messageBytes = getSigBytes(components);
-  
-  // Hash the payload with SHA-256 using Node.js crypto
+
+  // Hash with SHA-256
   const messageHash = sha256(messageBytes);
-  
-  // Sign the hash with the private key
+
+  // Create signature (r,s) using cosmjs
   const signature = await Secp256k1.createSignature(messageHash, privateKey);
-  
-  // Concatenate r and s values instead of using DER format
-  const rawSignature = new Uint8Array([...signature.r(), ...signature.s()]);
-  
-  // Base64 encode
+
+  // If we DON'T pad the signature here, it will be shorter whenever the first byte of r or s is 0 (about once ever 128
+    // tries, and will fail to validate
+  // Helper: left pad to 32 bytes
+  const pad32 = (u: Uint8Array): Uint8Array => {
+    if (u.length === 32) return u;
+    const out = new Uint8Array(32);
+    out.set(u, 32 - u.length);
+    return out;
+  };
+
+  // Extract r,s and convert to BigInt for low-S normalization
+  let r = signature.r();
+  let s = signature.s();
+
+  // secp256k1 curve order (n)
+  const n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141n;
+  const halfN = n >> 1n;
+
+  const bi = (u: Uint8Array): bigint => {
+    let v = 0n;
+    for (const b of u) v = (v << 8n) + BigInt(b);
+    return v;
+  };
+
+  const toBytes32 = (x: bigint): Uint8Array => {
+    const out = new Uint8Array(32);
+    for (let i = 31; i >= 0; i--) {
+      out[i] = Number(x & 0xffn);
+      x >>= 8n;
+    }
+    return out;
+  };
+
+  // Low-S normalization to match other impls
+  const sBig = bi(s);
+  const sNorm = sBig > halfN ? n - sBig : sBig;
+
+  // Ensure fixed 32-byte r and s
+  const r32 = pad32(r);
+  const s32 = toBytes32(sNorm);
+
+  const rawSignature = new Uint8Array(64);
+  rawSignature.set(r32, 0);
+  rawSignature.set(s32, 32);
+
+  // Base64 encode (standard, with padding)
   return Buffer.from(rawSignature).toString('base64');
 };
 
@@ -395,7 +438,7 @@ export const gonkaFetch = (
           timestamp: timestamp,
           transferAddress: selectedEndpoint.transferAddress
         };
-        
+
         // Sign the components
         const signature = await gonkaSignature(components, privateKey);
         
