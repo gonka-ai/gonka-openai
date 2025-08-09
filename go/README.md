@@ -27,9 +27,7 @@ func main() {
     // GONKA_PRIVATE_KEY and GONKA_SOURCE_URL respectively
     client, err := gonkaopenai.NewGonkaOpenAI(gonkaopenai.Options{
         GonkaPrivateKey: "0x1234...", // ECDSA private key for signing requests
-        SourceUrl: "https://api.gonka.testnet.example.com", // URL to fetch endpoints from
-        // Optional parameters:
-        // GonkaAddress: "cosmos1...", // Override derived Cosmos address
+        SourceUrl: "https://api.gonka.testnet.example.com", // Resolve endpoints from this SourceUrl
     })
     if err != nil {
         panic(err)
@@ -68,7 +66,7 @@ func main() {
     // GonkaHTTPClient will fetch endpoints from SourceUrl
     httpClient, err := gonkaopenai.GonkaHTTPClient(gonkaopenai.HTTPClientOptions{
         PrivateKey: "0x1234...",
-        SourceUrl:  sourceUrl, // URL to fetch endpoints from
+        SourceUrl:  sourceUrl,
     })
     if err != nil {
         panic(err)
@@ -107,8 +105,9 @@ This approach provides the same dynamic request signing as Option 1, but gives y
 Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
-- `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
 - `GONKA_SOURCE_URL`: (Optional) URL to fetch endpoints from
+- `GONKA_VERIFY_PROOF`: (Optional) Set to `1` to enable ICS23 proof verification during endpoint discovery. If unset, verification is skipped by default.
+- `GONKA_ADDRESS`: (Optional) Override the derived Cosmos address
 
 ## Advanced Configuration
 

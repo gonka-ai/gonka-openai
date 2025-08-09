@@ -32,6 +32,7 @@ setup(
         "ecdsa>=0.18.0",
         "bech32>=1.2.0",
         "requests>=2.25.0",
+        "protobuf>=4.25.0",
     ],
     extras_require={
         "dev": [

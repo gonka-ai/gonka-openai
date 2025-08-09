@@ -1,7 +1,9 @@
 import { ClientOptions } from 'openai';
 
 /**
- * Endpoint object with URL and TransferAddress
+ * Endpoint object with URL and provider address.
+ * "transferAddress" is the canonical field used internally.
+ * "address" is an alias for compatibility and readability.
  */
 export interface GonkaEndpoint {
   /**
@@ -10,9 +12,14 @@ export interface GonkaEndpoint {
   url: string;
   
   /**
-   * Cosmos address of the endpoint provider
+   * Provider's gonka address (used for signing)
    */
   transferAddress: string;
+
+  /**
+   * Alias for provider address (same value as transferAddress)
+   */
+  address?: string;
 }
 
 /**
@@ -31,7 +38,7 @@ export interface GonkaOpenAIOptions extends Omit<ClientOptions, 'baseURL' | 'def
   gonkaPrivateKey?: string;
 
   /**
-   * Cosmos address to use as requester
+   * Requester gonka address
    * If not provided, will be derived from privateKey with chain_id "gonka-testnet-1"
    * Or read from GONKA_ADDRESS environment variable
    */
@@ -41,9 +48,14 @@ export interface GonkaOpenAIOptions extends Omit<ClientOptions, 'baseURL' | 'def
    * List of Gonka network endpoints to use
    * One will be selected randomly for each client instance
    * If not provided, will use DEFAULT_ENDPOINTS or GONKA_ENDPOINTS environment variable
-   * Each endpoint must include both a URL and a TransferAddress (Cosmos address of the provider)
+   * Each endpoint must include both a URL and a provider address (transferAddress)
    */
   endpoints?: GonkaEndpoint[];
+
+  /**
+   * Optional SourceUrl for participants discovery (if provided, takes precedence over endpoints)
+   */
+  sourceUrl?: string;
 
   /**
    * Custom function for signing request bodies
@@ -76,7 +88,7 @@ export interface SignatureComponents {
   timestamp: bigint;
   
   /**
-   * Cosmos address of the endpoint provider
+   * Provider's gonka address
    */
   transferAddress: string;
 }
@@ -85,3 +97,8 @@ export interface SignatureComponents {
  * Function to sign request body with private key
  */
 export type SignatureFunction = (components: SignatureComponents, privateKey: string) => string | Promise<string>; 
+
+/**
+ * Aligned alias exported for parity with Go/Python naming.
+ */
+export type Endpoint = GonkaEndpoint;

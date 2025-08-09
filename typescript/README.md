@@ -15,19 +15,13 @@ There are two ways to use this library:
 ### Option 1: Using the GonkaOpenAI wrapper (recommended)
 
 ```typescript
-import { GonkaOpenAI } from 'gonka-openai';
+import { resolveEndpoints, GonkaOpenAI } from 'gonka-openai';
 
+const endpoints = await resolveEndpoints({ sourceUrl: 'https://gonka.example.com' });
 // Private key can be provided directly or through environment variable GONKA_PRIVATE_KEY
-const client = new GonkaOpenAI({
+const client = new GonkaOpenAI({ 
   gonkaPrivateKey: '0x1234...', // ECDSA private key for signing requests
-  endpoints: [
-    {
-      url: 'https://gonka1.example.com/v1',
-      transferAddress: 'gonka1...' // gonka address of the endpoint provider
-    }
-  ], // Gonka endpoints with transfer addresses
-  // Optional parameters:
-  // gonkaAddress: 'gonka1...', // Override derived gonka address
+  endpoints
 });
 
 // Use exactly like the original OpenAI client
@@ -41,25 +35,20 @@ const response = await client.chat.completions.create({
 
 ```typescript
 import OpenAI from 'openai';
-import { gonkaBaseURL, gonkaFetch } from 'gonka-openai';
+import { gonkaBaseURL, gonkaFetch, resolveAndSelectEndpoint } from 'gonka-openai';
+
+const {endpoints, selectedEndpoint} = await resolveAndSelectEndpoint({ sourceUrl: 'https://gonka.example.com' });
 
 // Create a custom fetch function for Gonka with your private key
 const fetch = gonkaFetch({
-  gonkaPrivateKey: '0x1234...' // Your private key
+  gonkaPrivateKey: '0x1234...', // Your private key
+  selectedEndpoint: selectedEndpoint
 });
-
-// Define endpoints with transfer addresses
-const endpoints = [
-  {
-    url: 'https://gonka1.example.com/v1',
-    transferAddress: 'gonka1...' // gonka address of the endpoint provider
-  }
-];
 
 // Create an OpenAI client with the custom fetch function
 const client = new OpenAI({
   apiKey: 'mock-api-key', // OpenAI requires any key
-  baseURL: gonkaBaseURL(endpoints).url, // Use Gonka network endpoints 
+  baseURL: selectedEndpoint.url, // Use Gonka network endpoints 
   fetch: fetch // Use the custom fetch function that signs requests
 });
 
@@ -77,6 +66,8 @@ This approach provides the same dynamic request signing as Option 1, but gives y
 Instead of passing configuration directly, you can use environment variables:
 
 - `GONKA_PRIVATE_KEY`: Your ECDSA private key for signing requests
+- `GONKA_SOURCE_URL`: (Optional) Participants discovery URL. Note: used by the resolver helpers (`resolveEndpoints`, `resolveAndSelectEndpoint`); the class constructor does not resolve it automatically.
+- `GONKA_VERIFY_PROOF`: (Optional) Set to `1` to enable ICS23 proof verification during endpoint discovery. If unset, verification is skipped by default.
 - `GONKA_ENDPOINTS`: (Optional) Comma-separated list of Gonka network endpoints with their transfer addresses. Each endpoint is specified as `url;transferAddress` (semicolon-separated pair).
 - `GONKA_ADDRESS`: (Optional) Override the derived gonka address
 
@@ -85,14 +76,13 @@ Example with environment variables:
 ```typescript
 // Set in your environment:
 // GONKA_PRIVATE_KEY=0x1234...
-// GONKA_ENDPOINTS=https://gonka1.example.com/v1;gonka1address1,https://gonka2.example.com/v1;gonka1address2
+// GONKA_SOURCE_URL=https://gonka1.example.com
 
-import { GonkaOpenAI } from 'gonka-openai';
+import { GonkaOpenAI, resolveEndpoints } from 'gonka-openai';
 
-const client = new GonkaOpenAI({
-  apiKey: 'mock-api-key',
-  // No need to provide privateKey and endpoints, it will be read from environment
-});
+// Resolve endpoints from SourceUrl, then construct the client
+const endpoints = await resolveEndpoints({});
+const client = new GonkaOpenAI({ apiKey: 'mock-api-key', endpoints });
 
 // Use normally
 const response = await client.chat.completions.create({
@@ -110,18 +100,20 @@ You can provide a custom endpoint selection strategy:
 ```typescript
 import { GonkaOpenAI } from 'gonka-openai';
 
+const endpoints = await resolveEndpoints({ sourceUrl: 'https://gonka.example.com' });
+
 const client = new GonkaOpenAI({
   apiKey: 'mock-api-key',
   gonkaPrivateKey: '0x1234...',
   endpoints: [
     {
       url: 'https://gonka1.example.com/v1',
-      transferAddress: 'gonka1address1'
+      transferAddress: 'gonka1a...'
     },
     {
       url: 'https://gonka2.example.com/v1',
-      transferAddress: 'gonka1address2'
-    }
+      transferAddress: 'gonka1b...'
+    },
   ],
   endpointSelectionStrategy: (endpoints) => {
     // Custom selection logic

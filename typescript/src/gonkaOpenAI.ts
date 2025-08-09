@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { GonkaOpenAIOptions, SignatureComponents } from './types.js';
+import { GonkaOpenAIOptions, SignatureComponents, GonkaEndpoint } from './types.js';
 import { customEndpointSelection, gonkaBaseURL, gonkaFetch, getNanoTimestamp } from './utils.js';
 import { gonkaSignature as signatureFunction } from './utils.js';
 import { ENV } from './constants.js';
@@ -11,7 +11,9 @@ export class GonkaOpenAI extends OpenAI {
   private readonly _privateKey: string;
   
   // Store the selected endpoint
-  private readonly _selectedEndpoint;
+  private readonly _selectedEndpoint: GonkaEndpoint;
+  private _sourceUrl?: string;
+  private _endpoints?: GonkaEndpoint[];
   
   /**
    * Create a new GonkaOpenAI client
@@ -25,21 +27,33 @@ export class GonkaOpenAI extends OpenAI {
       throw new Error(`Private key must be provided either in options or through ${ENV.PRIVATE_KEY} environment variable`);
     }
 
+    // Prepare configuration (avoid using `this` before super())
+    const sourceUrlLocal = options.sourceUrl || process.env['GONKA_SOURCE_URL'];
+    const endpointsLocal: GonkaEndpoint[] | undefined =
+      options.endpoints && options.endpoints.length ? options.endpoints : undefined;
+
+    // Determine candidate endpoints for selection (only use provided; env/defaults handled by gonkaBaseURL)
+    const resolvedEndpoints: GonkaEndpoint[] = endpointsLocal || [];
+
     // Determine the endpoint
-    let selectedEndpoint;
+    let selectedEndpoint: GonkaEndpoint;
     if (options.endpointSelectionStrategy) {
       // Use custom endpoint selection strategy if provided
-      selectedEndpoint = customEndpointSelection(options.endpointSelectionStrategy, options.endpoints);
+      selectedEndpoint = customEndpointSelection(options.endpointSelectionStrategy, resolvedEndpoints);
     } else {
       // Default to random endpoint selection
-      selectedEndpoint = gonkaBaseURL(options.endpoints);
+      selectedEndpoint = gonkaBaseURL(resolvedEndpoints);
     }
 
     // Create the signing fetch function
     const signingFetch = gonkaFetch({
       gonkaPrivateKey: privateKey,
-      gonkaAddress: options.gonkaAddress || process.env[ENV.ADDRESS]
+      gonkaAddress: options.gonkaAddress || process.env[ENV.ADDRESS],
+      selectedEndpoint: selectedEndpoint,
     });
+
+    // Normalize endpoint alias for consistency
+    if (!selectedEndpoint.address) selectedEndpoint.address = selectedEndpoint.transferAddress;
 
     // Create the OpenAI configuration object
     const openAIConfig = {
@@ -61,6 +75,8 @@ export class GonkaOpenAI extends OpenAI {
     // Save the private key and selected endpoint for signing requests
     this._privateKey = privateKey;
     this._selectedEndpoint = selectedEndpoint;
+    this._sourceUrl = sourceUrlLocal;
+    this._endpoints = endpointsLocal;
   }
   
   /**
@@ -82,7 +98,7 @@ export class GonkaOpenAI extends OpenAI {
     const timestamp = getNanoTimestamp();
     
     // Use the provided transfer address or the selected endpoint's address
-    const address = transferAddress || this._selectedEndpoint.transferAddress;
+    const address = transferAddress || this._selectedEndpoint.address || this._selectedEndpoint.transferAddress;
     
     // Create signature components
     const components: SignatureComponents = {

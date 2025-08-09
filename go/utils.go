@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"math/rand"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,31 @@ func GonkaBaseURL(endpoints []Endpoint) string {
 	// Select a random endpoint
 	randomIndex := rand.Intn(len(endpoints))
 	return endpoints[randomIndex].URL
+}
+
+// GetEndpointsFromEnv parses endpoints from GONKA_ENDPOINTS env var in the format "url;address, url;address".
+func GetEndpointsFromEnv() []Endpoint {
+	env := os.Getenv(EnvEndpoints)
+	if env == "" {
+		return nil
+	}
+	var out []Endpoint
+	for _, part := range strings.Split(env, ",") {
+		p := strings.TrimSpace(part)
+		if p == "" {
+			continue
+		}
+		segs := strings.SplitN(p, ";", 2)
+		if len(segs) != 2 {
+			continue
+		}
+		url := strings.TrimSpace(segs[0])
+		addr := strings.TrimSpace(segs[1])
+		if url != "" && addr != "" {
+			out = append(out, Endpoint{URL: url, Address: addr})
+		}
+	}
+	return out
 }
 
 // GonkaSignature signs request body with ECDSA secp256k1 and returns base64.

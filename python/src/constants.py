@@ -9,6 +9,7 @@ class ENV:
     PRIVATE_KEY = "GONKA_PRIVATE_KEY"
     ADDRESS = "GONKA_ADDRESS"
     ENDPOINTS = "GONKA_ENDPOINTS"
+    SOURCE_URL = "GONKA_SOURCE_URL"
 
 # Chain ID for Gonka network
 GONKA_CHAIN_ID = "gonka-testnet-1"

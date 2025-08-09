@@ -7,5 +7,7 @@ gonka_openai.egg-info/requires.txt
 gonka_openai.egg-info/top_level.txt
 src/__init__.py
 src/constants.py
+src/entities.py
+src/get_participants_with_proof.py
 src/gonka_openai.py
 src/utils.py
