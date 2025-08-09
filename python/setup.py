@@ -10,7 +10,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="gonka-openai",
-    version="0.2.1",
+    version="0.2.2",
     author="David Liberman",
     author_email="david@liberman.net",
     description="OpenAI client with Gonka network integration",
