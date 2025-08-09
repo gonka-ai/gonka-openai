@@ -99,7 +99,7 @@ export const resolveAndSelectEndpoint = async (opts: {
   const endpoints = await resolveEndpoints(opts);
   const selected = opts.endpointSelectionStrategy
     ? customEndpointSelection(opts.endpointSelectionStrategy, endpoints)
-    : gonkaBaseURL(endpoints);
+    : selectEndpointWithWeights(endpoints);
   return { endpoints, selected };
 };
 
@@ -150,7 +150,8 @@ export const getParticipantsWithProofFromPayload = (payload: any, verify: boolea
     if (p?.inference_url && p?.index) {
       const url = ensureV1(p.inference_url);
       const addr = p.index;
-      endpoints.push({ url, transferAddress: addr, address: addr });
+      const weight = typeof p.weight === 'number' ? p.weight : undefined;
+      endpoints.push({ url, transferAddress: addr, address: addr, weight });
     }
   }
   return endpoints;
@@ -191,6 +192,32 @@ export const customEndpointSelection = (
 
   // Use the provided strategy to select an endpoint
   return endpointSelectionStrategy(endpointList);
+};
+
+/**
+ * Select an endpoint with optional weight-based selection.
+ * - If any endpoint has a numeric weight, filter out those with weight < 1000 and select by weight sum.
+ * - Otherwise, select uniformly at random.
+ */
+export const selectEndpointWithWeights = (endpoints?: GonkaEndpoint[]): GonkaEndpoint => {
+  if (!endpoints || endpoints.length === 0) return gonkaBaseURL();
+  const hasWeights = endpoints.some(e => typeof e.weight === 'number');
+  if (!hasWeights) return gonkaBaseURL(endpoints);
+
+  const filtered = endpoints.filter(e => (typeof e.weight === 'number' ? e.weight : 0) >= 1000);
+  const list = filtered.length ? filtered : endpoints;
+
+  const weights = list.map(e => (typeof e.weight === 'number' ? e.weight! : 1));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) return gonkaBaseURL(list);
+
+  const r = Math.random() * total;
+  let acc = 0;
+  for (let i = 0; i < list.length; i++) {
+    acc += weights[i];
+    if (r < acc) return list[i];
+  }
+  return list[list.length - 1];
 };
 
 import { SignatureComponents } from './types.js';

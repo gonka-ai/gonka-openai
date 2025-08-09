@@ -76,9 +76,10 @@ def _process_payload(payload: dict) -> List[Endpoint]:
         for p in participants:
             url = (p or {}).get("inference_url")
             addr = (p or {}).get("index")
+            weight = (p or {}).get("weight")
             if not url or not addr:
                 continue
-            endpoints.append(Endpoint(url=_ensure_v1(url), address=addr))
+            endpoints.append(Endpoint(url=_ensure_v1(url), address=addr, weight=weight))
         return endpoints
 
     # Full parse + verification
@@ -105,7 +106,8 @@ def _process_payload(payload: dict) -> List[Endpoint]:
         if not participant or not participant.inference_url or not participant.index:
             # Skip invalid entries silently
             continue
-        endpoints.append(Endpoint(url=_ensure_v1(participant.inference_url), address=participant.index))
+        weight = getattr(participant, "weight", None)
+        endpoints.append(Endpoint(url=_ensure_v1(participant.inference_url), address=participant.index, weight=weight))
 
     return endpoints
 

@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { GonkaOpenAIOptions, SignatureComponents, GonkaEndpoint } from './types.js';
-import { customEndpointSelection, gonkaBaseURL, gonkaFetch, getNanoTimestamp } from './utils.js';
+import { customEndpointSelection, gonkaBaseURL, gonkaFetch, getNanoTimestamp, selectEndpointWithWeights } from './utils.js';
 import { gonkaSignature as signatureFunction } from './utils.js';
 import { ENV } from './constants.js';
 
@@ -41,8 +41,8 @@ export class GonkaOpenAI extends OpenAI {
       // Use custom endpoint selection strategy if provided
       selectedEndpoint = customEndpointSelection(options.endpointSelectionStrategy, resolvedEndpoints);
     } else {
-      // Default to random endpoint selection
-      selectedEndpoint = gonkaBaseURL(resolvedEndpoints);
+      // Default to random selection, with weights if available
+      selectedEndpoint = selectEndpointWithWeights(resolvedEndpoints.length ? resolvedEndpoints : undefined as any);
     }
 
     // Create the signing fetch function

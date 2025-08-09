@@ -20,6 +20,11 @@ export interface GonkaEndpoint {
    * Alias for provider address (same value as transferAddress)
    */
   address?: string;
+
+  /**
+   * Optional participant weight used for weighted selection (if provided by SourceUrl discovery)
+   */
+  weight?: number;
 }
 
 /**

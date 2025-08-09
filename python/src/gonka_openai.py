@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any, Union
 from openai import OpenAI
 
 from .utils import gonka_base_url, gonka_address as utils_gonka_address, custom_endpoint_selection, gonka_http_client, \
-    Endpoint
+    Endpoint, select_endpoint_with_weights
 from .constants import ENV, GONKA_CHAIN_ID
 from .utils import get_endpoints_from_env_or_default
 from .get_participants_with_proof import get_participants_with_proof
@@ -73,8 +73,8 @@ class GonkaOpenAI(OpenAI):
             # Use custom endpoint selection strategy if provided
             base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, resolved_endpoints)
         else:
-            # Default to random endpoint selection
-            base_endpoint = gonka_base_url(resolved_endpoints)
+            # Default to selection with weights if provided (fallback to random)
+            base_endpoint = select_endpoint_with_weights(resolved_endpoints)
         
         # Save the private key for later use
         self._private_key = private_key

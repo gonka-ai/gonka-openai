@@ -35,10 +35,54 @@ func GonkaBaseURL(endpoints []Endpoint) string {
 		return ""
 	}
 
-	// Initialize random seed
-	rand.Seed(time.Now().UnixNano())
+	// If any weight is set, prefer weighted selection with threshold
+	hasWeights := false
+	for _, e := range endpoints {
+		if e.Weight != 0 {
+			hasWeights = true
+			break
+		}
+	}
+	if hasWeights {
+		// Filter by threshold >= 1000
+		filtered := make([]Endpoint, 0, len(endpoints))
+		for _, e := range endpoints {
+			if e.Weight >= 1000 {
+				filtered = append(filtered, e)
+			}
+		}
+		pool := filtered
+		if len(pool) == 0 {
+			pool = endpoints
+		}
+		var total int64
+		for _, e := range pool {
+			w := e.Weight
+			if w <= 0 {
+				w = 1
+			}
+			total += w
+		}
+		if total > 0 {
+			rand.Seed(time.Now().UnixNano())
+			r := rand.Int63n(total)
+			var acc int64
+			for _, e := range pool {
+				w := e.Weight
+				if w <= 0 {
+					w = 1
+				}
+				acc += w
+				if r < acc {
+					return e.URL
+				}
+			}
+			return pool[len(pool)-1].URL
+		}
+	}
 
-	// Select a random endpoint
+	// Fallback to uniform random
+	rand.Seed(time.Now().UnixNano())
 	randomIndex := rand.Intn(len(endpoints))
 	return endpoints[randomIndex].URL
 }

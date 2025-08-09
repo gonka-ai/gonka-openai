@@ -15,6 +15,7 @@ import (
 type Endpoint struct {
 	URL     string
 	Address string
+	Weight  int64
 }
 
 // Options for creating a GonkaOpenAI client.

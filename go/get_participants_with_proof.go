@@ -85,14 +85,7 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 		}
 
 		// Map to endpoints
-		endpoints = make([]Endpoint, 0, len(participantResp.ActiveParticipants.Participants))
-		for _, participant := range participantResp.ActiveParticipants.Participants {
-			inferenceUrl := participant.InferenceUrl
-			endpoints = append(endpoints, Endpoint{
-				URL:     inferenceUrl + "/v1",
-				Address: participant.Index,
-			})
-		}
+		endpoints = endpointsFromParticipants(participantResp.ActiveParticipants.Participants)
 	} else {
 		// Light decode: ignore block/proof, just participants
 		var light struct {
@@ -101,16 +94,23 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 		if err := json.Unmarshal(bodyBytes, &light); err != nil {
 			return nil, fmt.Errorf("failed to decode response (light): %w", err)
 		}
-		endpoints = make([]Endpoint, 0, len(light.ActiveParticipants.Participants))
-		for _, participant := range light.ActiveParticipants.Participants {
-			inferenceUrl := participant.InferenceUrl
-			endpoints = append(endpoints, Endpoint{
-				URL:     inferenceUrl + "/v1",
-				Address: participant.Index,
-			})
-		}
+		endpoints = endpointsFromParticipants(light.ActiveParticipants.Participants)
 	}
 	return endpoints, nil
+}
+
+// endpointsFromParticipants converts ActiveParticipant list to Endpoint list, adding "/v1" suffix and carrying weight.
+func endpointsFromParticipants(participants []*ActiveParticipant) []Endpoint {
+	endpoints := make([]Endpoint, 0, len(participants))
+	for _, participant := range participants {
+		inferenceUrl := participant.InferenceUrl
+		endpoints = append(endpoints, Endpoint{
+			URL:     inferenceUrl + "/v1",
+			Address: participant.Index,
+			Weight:  participant.Weight,
+		})
+	}
+	return endpoints
 }
 
 // VerifyIAVLProofAgainstAppHash verifies the correctness of an ABCIQuery response for ActiveParticipants.

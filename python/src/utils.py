@@ -49,6 +49,7 @@ class Endpoint:
     """
     url: str
     address: str
+    weight: Optional[int] = None
     
     @classmethod
     def parse(cls, endpoint_str: str) -> 'Endpoint':
@@ -115,6 +116,33 @@ def gonka_base_url(endpoints: Optional[List[Endpoint]] = None) -> Endpoint:
     return random.choice(endpoint_list)
 
 
+def select_endpoint_with_weights(endpoints: List[Endpoint]) -> Endpoint:
+    """Select endpoint using weights if present; otherwise uniform random.
+
+    - If any endpoint has a numeric weight, filter endpoints to weight >= 1000.
+    - If filter becomes empty, use original list.
+    - Pick proportionally to weight.
+    """
+    if not endpoints:
+        raise ValueError("no endpoints provided")
+    has_weights = any(e.weight is not None for e in endpoints)
+    if not has_weights:
+        return random.choice(endpoints)
+    filtered = [e for e in endpoints if (e.weight or 0) >= 1000]
+    pool = filtered or endpoints
+    weights = [(e.weight or 1) for e in pool]
+    total = sum(weights)
+    if total <= 0:
+        return random.choice(pool)
+    r = random.uniform(0, total)
+    acc = 0.0
+    for e, w in zip(pool, weights):
+        acc += w
+        if r <= acc:
+            return e
+    return pool[-1]
+
+
 def resolve_endpoints(source_url: Optional[str] = None, endpoints: Optional[List[Endpoint]] = None) -> List[Endpoint]:
     """
     Resolve endpoints using SourceUrl first, then provided list, then env/defaults.
@@ -149,7 +177,7 @@ def resolve_and_select_endpoint(source_url: Optional[str] = None,
     eps = resolve_endpoints(source_url=source_url, endpoints=endpoints)
     if endpoint_selection_strategy:
         return eps, endpoint_selection_strategy(eps)
-    return eps, gonka_base_url(eps)
+    return eps, select_endpoint_with_weights(eps)
 
 
 def custom_endpoint_selection(
