@@ -37,18 +37,18 @@ const response = await client.chat.completions.create({
 import OpenAI from 'openai';
 import { gonkaBaseURL, gonkaFetch, resolveAndSelectEndpoint } from 'gonka-openai';
 
-const {endpoints, selectedEndpoint} = await resolveAndSelectEndpoint({ sourceUrl: 'https://gonka.example.com' });
+const {endpoints, selected} = await resolveAndSelectEndpoint({ sourceUrl: 'https://gonka.example.com' });
 
 // Create a custom fetch function for Gonka with your private key
 const fetch = gonkaFetch({
   gonkaPrivateKey: '0x1234...', // Your private key
-  selectedEndpoint: selectedEndpoint
+  selectedEndpoint: selected
 });
 
 // Create an OpenAI client with the custom fetch function
 const client = new OpenAI({
   apiKey: 'mock-api-key', // OpenAI requires any key
-  baseURL: selectedEndpoint.url, // Use Gonka network endpoints 
+  baseURL: selected.url, // Use Gonka network endpoints 
   fetch: fetch // Use the custom fetch function that signs requests
 });
 
