@@ -24,7 +24,12 @@ func (g *GonkaOpenAI) GetParticipantsUrls(ctx context.Context, epoch string) ([]
 	}
 
 	// TODO after genesis block hash is hardcoded, use VerifyParticipants here
-	err = utils.VerifyIAVLProofAgainstAppHash(resp.Block.AppHash, resp.ProofOps.Ops, val)
+	appHash, err := hex.DecodeString(resp.BlockProof.AppHashHex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
+	}
+
+	err = utils.VerifyIAVLProofAgainstAppHash(appHash, resp.ProofOps.Ops, val)
 	if err != nil {
 		return nil, fmt.Errorf("failed to verify participants proof: %w", err)
 	}
@@ -37,7 +42,7 @@ func (g *GonkaOpenAI) GetParticipantsUrls(ctx context.Context, epoch string) ([]
 }
 
 func (g *GonkaOpenAI) VerifyParticipants(ctx context.Context, expectedHashHex string) error {
-	return utils.VerifyParticipants(ctx, expectedHashHex, g.getParticipants, g.GetValidators, g.GetBlock)
+	return utils.VerifyParticipants(ctx, expectedHashHex, g.getParticipants)
 }
 
 func (g *GonkaOpenAI) GetBlock(ctx context.Context, height int64) (*coretypes.ResultBlock, error) {
@@ -47,17 +52,6 @@ func (g *GonkaOpenAI) GetBlock(ctx context.Context, height int64) (*coretypes.Re
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
 	}
-	return &resp, err
-}
-
-func (g *GonkaOpenAI) GetValidators(ctx context.Context, height int64) (*contracts.BlockValidators, error) {
-	url := fmt.Sprintf("v1/validators/%v", height)
-	var resp contracts.BlockValidators
-	err := g.Get(ctx, url, nil, &resp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch participants with proof: %w", err)
-	}
-
 	return &resp, err
 }
 

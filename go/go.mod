@@ -11,7 +11,7 @@ require (
 
 require (
 	github.com/cometbft/cometbft v0.38.17
-	github.com/gonka-ai/gonka-utils/go v0.0.0-20250803220145-149a2da98ccd
+	github.com/gonka-ai/gonka-utils/go v0.0.0-20250817223602-31e61686233a
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.38.0
 )
@@ -47,6 +47,7 @@ require (
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/flatbuffers v1.12.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/holiman/uint256 v1.2.4 // indirect
 	github.com/jmhodges/levigo v1.0.0 // indirect
 	github.com/klauspost/compress v1.17.9 // indirect
@@ -62,6 +63,7 @@ require (
 	github.com/prometheus/client_model v0.6.1 // indirect
 	github.com/prometheus/common v0.62.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
+	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
