@@ -1,4 +1,4 @@
-module github.com/libermans/gonka-openai/go
+module github.com/gonka-ai/gonka-openai/go
 
 go 1.24.5
 

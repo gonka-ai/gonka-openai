@@ -1,8 +1,9 @@
 import OpenAI from 'openai';
-import { GonkaOpenAI, gonkaBaseURL, gonkaFetch } from './dist/index.js';
+import { GonkaOpenAI, gonkaFetch, getParticipantsWithProofFromPayload, resolveAndSelectEndpoint } from './dist/index.js';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
+let defaultModel = 'Qwen/QwQ-32B';
 
 // Check for required environment variables
 const requiredEnvVars = ['GONKA_PRIVATE_KEY'];
@@ -14,7 +15,7 @@ if (missingEnvVars.length > 0) {
 }
 
 // Determine if we should use real requests or mock them
-const USE_REAL_REQUESTS = Boolean(process.env.GONKA_ENDPOINTS);
+const USE_REAL_REQUESTS = Boolean(process.env.GONKA_SOURCE_URL) || Boolean(process.env.GONKA_ENDPOINTS);
 
 // Store original fetch for later restoration if we're mocking
 const originalFetch = global.fetch;
@@ -67,7 +68,7 @@ if (!USE_REAL_REQUESTS) {
         id: 'mock-completion-id',
         object: 'chat.completion',
         created: Date.now(),
-        model: 'Qwen/QwQ-32B',
+        model: defaultModel,
         choices: [
           {
             message: {
@@ -85,9 +86,19 @@ if (!USE_REAL_REQUESTS) {
 
 const run = async () => {
   try {
+    // Verify ICS23 via payload helper if TEST_JSON is set
+    if (process.env.TEST_JSON) {
+      const fs = await import('fs');
+      const payload = JSON.parse(fs.readFileSync(process.env.TEST_JSON, 'utf-8'));
+      const endpoints = getParticipantsWithProofFromPayload(payload, true);
+      console.log('\nParticipants from payload (verified):', endpoints);
+    }
     console.log('\n------ Test Environment ------');
-    const baseUrl = gonkaBaseURL();
-    console.log('Using Gonka Base URL:', baseUrl);
+    const {endpoints, selected } = await resolveAndSelectEndpoint({});
+    console.log('Using Gonka Endpoint:', {
+      url: selected.url,
+      transferAddress: selected.transferAddress
+    });
     
     if (USE_REAL_REQUESTS) {
       console.log("Using REAL HTTP requests - this will make actual API calls!");
@@ -99,13 +110,13 @@ const run = async () => {
     console.log('\n------ Example 1: Using GonkaOpenAI wrapper ------');
     const gonkaClient = new GonkaOpenAI({
       gonkaPrivateKey: process.env.GONKA_PRIVATE_KEY,
-      apiKey: 'mock-api-key', // Required by OpenAI client
+      endpoints,
     });
     
     // Make a chat completion request
     console.log('\nSending first request...');
     const chatResponse = await gonkaClient.chat.completions.create({
-      model: 'Qwen/QwQ-32B',
+      model: defaultModel,
       messages: [{ role: 'user', content: 'Hello! Tell me a short joke.' }],
     });
     
@@ -117,20 +128,21 @@ const run = async () => {
     
     // Get a custom fetch function configured with our private key
     const customFetch = gonkaFetch({
-      gonkaPrivateKey: process.env.GONKA_PRIVATE_KEY
+      gonkaPrivateKey: process.env.GONKA_PRIVATE_KEY,
+      selectedEndpoint: selected
     });
     
     // Create a standard OpenAI client with our custom fetch
     const openaiClient = new OpenAI({
       apiKey: 'mock-api-key', // This can be any string when using Gonka
-      baseURL: baseUrl,
+      baseURL: selected.url, // Use the URL property from the endpoint
       fetch: customFetch
     });
     
     // Make a request with the standard client (will be signed by our custom fetch)
     console.log('\nSending request with standard client + custom fetch...');
     const standardResponse = await openaiClient.chat.completions.create({
-      model: 'Qwen/QwQ-32B',
+      model: defaultModel,
       messages: [{ role: 'user', content: 'What is the capital of France?' }],
     });
     

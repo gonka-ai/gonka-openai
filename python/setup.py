@@ -3,22 +3,23 @@
 Setup script for gonka-openai
 """
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
     name="gonka-openai",
-    version="0.2.1",
+    version="0.2.3",
     author="David Liberman",
     author_email="david@liberman.net",
     description="OpenAI client with Gonka network integration",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/product-science/gonka-openai",
-    packages=["gonka_openai"],
-    package_dir={"gonka_openai": "src"},
+    package_dir={"": "src"},
+    packages=find_packages(where="src"),
+    include_package_data=True,
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
@@ -32,6 +33,7 @@ setup(
         "ecdsa>=0.18.0",
         "bech32>=1.2.0",
         "requests>=2.25.0",
+        "protobuf>=4.25.0",
     ],
     extras_require={
         "dev": [

@@ -18,7 +18,8 @@ import httpx
 from openai import OpenAI, DefaultHttpxClient
 
 # Import the GonkaOpenAI client and utilities
-from src import GonkaOpenAI, gonka_base_url, gonka_http_client
+from src.utils import resolve_and_select_endpoint
+from src import GonkaOpenAI, gonka_http_client
 
 # Check for required environment variables
 required_env_vars = ['GONKA_PRIVATE_KEY']
@@ -29,28 +30,32 @@ if missing_env_vars:
     exit(1)
 
 # If GONKA_ENDPOINTS is set, we'll use real endpoints and real requests
-USE_REAL_REQUESTS = bool(os.environ.get('GONKA_ENDPOINTS'))
+USE_REAL_REQUESTS = bool(os.environ.get('GONKA_ENDPOINTS')) or bool(os.environ.get('GONKA_SOURCE_URL'))
+
+default_model = "Qwen/QwQ-32B"
 
 def run_tests():
     """Run the tests for the GonkaOpenAI library."""
     try:
-        # Determine URL based on whether GONKA_ENDPOINTS is set
-        selected_url = None
-        mock_base_url = None
+        # Determine SourceUrl based on whether GONKA_ENDPOINTS is set
+        selected_endpoint = None
+        source_url = None
         
         print("\n------ Test Environment ------")
         if USE_REAL_REQUESTS:
-            # Use real endpoints from environment
-            selected_url = gonka_base_url()
-            print(f"Using real Gonka Base URL: {selected_url}")
+            # Use SourceUrl from environment
+            source_url = os.environ.get('GONKA_SOURCE_URL')
+            if not source_url:
+                print("Missing GONKA_SOURCE_URL for real requests")
+                exit(1)
+            print(f"Using SourceUrl: {source_url}")
             print("Using REAL HTTP requests - this will make actual API calls!")
             test_client = None  # Will use the default client
         else:
-            # Use mock URL and mock requests
-            mock_base_url = "https://mock-gonka-api.example.com"
-            selected_url = mock_base_url  # For consistency
-            original_base_url = unittest.mock.patch('src.utils.gonka_base_url', return_value=mock_base_url).start()
-            print(f"Using mock Gonka Base URL: {mock_base_url}")
+            # Use file:// SourceUrl and mock requests
+            test_json_path = os.path.abspath(os.path.join(os.path.dirname(__file__), 'test.json'))
+            source_url = f"file://{test_json_path}"
+            print(f"Using file SourceUrl: {source_url}")
             print("Using MOCK HTTP requests - responses will be simulated")
             # Create a real httpx.Client instance
             test_client = httpx.Client()
@@ -64,6 +69,7 @@ def run_tests():
             api_key="mock-api-key",
             gonka_private_key=os.environ.get('GONKA_PRIVATE_KEY'),
             http_client=test_client,
+            source_url=source_url,
         )
         
         print(f"Gonka Address: {gonka_client.gonka_address}")
@@ -71,7 +77,7 @@ def run_tests():
         # Make a chat completion request
         print("\nSending first request...")
         chat_response = gonka_client.chat.completions.create(
-            model="Qwen/QwQ-32B",
+            model=default_model,
             messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
         )
         
@@ -81,23 +87,27 @@ def run_tests():
         # Example 2: Using the original OpenAI client with a custom HTTP client
         print("\n\n------ Example 2: Using original OpenAI client with custom HTTP client ------")
         
+        # Resolve endpoints from SourceUrl and select one
+        endpoints, selected_endpoint = resolve_and_select_endpoint(source_url=source_url)
+
         # Create a custom HTTP client for the OpenAI client
         http_client = gonka_http_client(
             private_key=os.environ.get('GONKA_PRIVATE_KEY'),
-            http_client=test_client
+            http_client=test_client,
+            transfer_address=selected_endpoint.address
         )
         
         # Create a standard OpenAI client with the custom HTTP client
         openai_client = OpenAI(
             api_key="mock-api-key",
-            base_url=selected_url,
+            base_url=selected_endpoint.url,
             http_client=http_client
         )
         
         # Make a request with the standard client
         print("\nSending request with standard client + custom HTTP client...")
         standard_response = openai_client.chat.completions.create(
-            model="Qwen/QwQ-32B",
+            model=default_model,
             messages=[{"role": "user", "content": "What is the capital of France?"}],
         )
         
@@ -119,7 +129,7 @@ mock_response_data = {
     "id": "mock-completion-id",
     "object": "chat.completion",
     "created": 1683720588,
-    "model": "Qwen/QwQ-32B",
+    "model": default_model,
     "choices": [
         {
             "message": {
