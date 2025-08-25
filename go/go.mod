@@ -11,7 +11,7 @@ require (
 
 require (
 	github.com/cometbft/cometbft v0.38.17
-	github.com/gonka-ai/gonka-utils/go v0.0.0-20250817223602-31e61686233a
+	github.com/gonka-ai/gonka-utils/go v0.0.0-20250825124745-4c26bd0e6a76
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.38.0
 )
