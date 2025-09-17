@@ -14,7 +14,7 @@ import (
 
 var ErrInvalidEpoch = errors.New("invalid epoch")
 
-func getParticipantsWithProof(ctx context.Context, baseURL string, epoch string) utils.GetParticipantsFn {
+func getParticipantsWithProof(baseURL string) utils.GetParticipantsFn {
 	return func(ctx context.Context, epoch string) (*contracts.ActiveParticipantWithProof, error) {
 		if epoch == "" {
 			return nil, ErrInvalidEpoch
@@ -70,7 +70,8 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 		return nil, ErrInvalidEpoch
 	}
 
-	participantResp, err := getParticipantsWithProof(ctx, baseURL, epoch)(ctx, epoch)
+	fn := getParticipantsWithProof(baseURL)
+	participantResp, err := fn(ctx, epoch)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +79,7 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 	verify := os.Getenv(verifyEnabledEnv) == "1"
 	if verify {
 		expectedAppHashHex := os.Getenv("GONKA_APP_HASH_HEX")
-		err := utils.VerifyParticipants(ctx, expectedAppHashHex, getParticipantsWithProof(ctx, baseURL, epoch))
+		err := utils.VerifyParticipants(ctx, expectedAppHashHex, fn, epoch)
 		if err != nil {
 			return nil, err
 		}
