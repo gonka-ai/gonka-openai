@@ -221,14 +221,19 @@ def gonka_signature(body: Any, private_key_hex: str, timestamp: int, transfer_ad
     else:
         raise TypeError(f"Unsupported body type: {type(body)}. Must be dict, str, or bytes.")
     
-    # Create message payload by concatenating components as described in the issue
-    message_bytes = payload_bytes
-    message_bytes += str(timestamp).encode('utf-8')
-    message_bytes += transfer_address.encode('utf-8')
+    # Phase 3: Sign hash of payload instead of raw payload
+    payload_hash = hashlib.sha256(payload_bytes).hexdigest()
+    
+    # Build signature input: hash + timestamp + transfer_address
+    signature_input = payload_hash
+    signature_input += str(timestamp)
+    signature_input += transfer_address
+    
+    signature_bytes = signature_input.encode('utf-8')
 
     # Sign the message with deterministic ECDSA using our custom encoder
     signature = signing_key.sign_deterministic(
-        message_bytes,
+        signature_bytes,
         hashfunc=hashlib.sha256,
         sigencode=lambda r, s, order: encode_with_low_s(r, s, order)
     )
