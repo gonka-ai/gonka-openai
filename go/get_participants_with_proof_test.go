@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -36,4 +38,33 @@ func Test_GetParticipants(t *testing.T) {
 		OrgID:           "gonka-client-test-id",
 	})
 	assert.NoError(t, err)
+}
+
+func Test_SignatureVerification(t *testing.T) {
+	const (
+		genesisBlockAppHash = "8c677bc8ee51c988577f37aa4c44a8727f81af0b5b68f702550cff0dce9f7f98" // pass your expected hash
+		invalidAppHash      = "SOMEHASH"
+		baseURL             = "http://localhost:9020"
+		epoch               = "1"
+	)
+
+	err := os.Setenv(appHashEnv, genesisBlockAppHash)
+	assert.NoError(t, err)
+
+	err = os.Setenv(verifyEnabledEnv, "1")
+	assert.NoError(t, err)
+
+	_, err = GetParticipantsWithProof(context.Background(), baseURL, epoch)
+	assert.NoError(t, err)
+
+	err = os.Unsetenv(appHashEnv)
+	assert.NoError(t, err)
+
+	err = os.Setenv(appHashEnv, invalidAppHash)
+	assert.NoError(t, err)
+
+	endpoints, err := GetParticipantsWithProof(context.Background(), baseURL, epoch)
+	assert.Error(t, err)
+	assert.Len(t, endpoints, 0)
+	assert.True(t, strings.Contains(err.Error(), "participants unverified"))
 }
