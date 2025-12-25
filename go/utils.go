@@ -130,11 +130,10 @@ type SignatureComponents struct {
 
 // getSignatureBytes creates the message payload for signing according to the new method
 func getSignatureBytes(components SignatureComponents) []byte {
-	// Create message payload by concatenating components
-	messagePayload := []byte(components.Payload)
-	if components.Timestamp > 0 {
-		messagePayload = append(messagePayload, []byte(strconv.FormatInt(components.Timestamp, 10))...)
-	}
+	sum := sha256.Sum256([]byte(components.Payload))
+	messagePayload := []byte(hex.EncodeToString(sum[:]))
+
+	messagePayload = append(messagePayload, []byte(strconv.FormatInt(components.Timestamp, 10))...)
 	messagePayload = append(messagePayload, []byte(components.TransferAddress)...)
 	return messagePayload
 }
