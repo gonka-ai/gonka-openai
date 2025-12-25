@@ -24,7 +24,10 @@ import (
 )
 
 // CustomEndpointSelection allows providing custom strategy.
-func CustomEndpointSelection(f func([]Endpoint) string, endpoints []Endpoint) string {
+func CustomEndpointSelection(
+	f func([]Endpoint) string,
+	endpoints []Endpoint,
+) string {
 	eps := endpoints
 	return f(eps)
 }
@@ -50,27 +53,46 @@ func GetEndpointsFromEnv() []Endpoint {
 		return nil
 	}
 	var out []Endpoint
-	for _, part := range strings.Split(env, ",") {
+	for _, part := range strings.Split(
+		env,
+		",",
+	) {
 		p := strings.TrimSpace(part)
 		if p == "" {
 			continue
 		}
-		segs := strings.SplitN(p, ";", 2)
+		segs := strings.SplitN(
+			p,
+			";",
+			2,
+		)
 		if len(segs) != 2 {
 			continue
 		}
 		url := strings.TrimSpace(segs[0])
 		addr := strings.TrimSpace(segs[1])
 		if url != "" && addr != "" {
-			out = append(out, Endpoint{URL: url, Address: addr})
+			out = append(
+				out,
+				Endpoint{
+					URL:     url,
+					Address: addr,
+				},
+			)
 		}
 	}
 	return out
 }
 
 // GonkaSignature signs request body with ECDSA secp256k1 and returns base64.
-func GonkaSignature(body []byte, privateKeyHex string) (string, error) {
-	if strings.HasPrefix(privateKeyHex, "0x") {
+func GonkaSignature(
+	body []byte,
+	privateKeyHex string,
+) (string, error) {
+	if strings.HasPrefix(
+		privateKeyHex,
+		"0x",
+	) {
 		privateKeyHex = privateKeyHex[2:]
 	}
 	keyBytes, err := hex.DecodeString(privateKeyHex)
@@ -82,22 +104,40 @@ func GonkaSignature(body []byte, privateKeyHex string) (string, error) {
 		return "", err
 	}
 	hash := sha256.Sum256(body)
-	r, s, err := ecdsa.Sign(crand.Reader, priv, hash[:])
+	r, s, err := ecdsa.Sign(
+		crand.Reader,
+		priv,
+		hash[:],
+	)
 	if err != nil {
 		return "", err
 	}
 	// Low-S normalization
 	curveOrder := priv.Params().N
-	if s.Cmp(new(big.Int).Rsh(curveOrder, 1)) == 1 {
-		s = new(big.Int).Sub(curveOrder, s)
+	if s.Cmp(
+		new(big.Int).Rsh(
+			curveOrder,
+			1,
+		),
+	) == 1 {
+		s = new(big.Int).Sub(
+			curveOrder,
+			s,
+		)
 	}
-	sigBytes := append(r.Bytes(), s.Bytes()...)
+	sigBytes := append(
+		r.Bytes(),
+		s.Bytes()...,
+	)
 	return base64.StdEncoding.EncodeToString(sigBytes), nil
 }
 
 // GonkaAddress derives a Cosmos bech32 address from private key.
 func GonkaAddress(privateKeyHex string) (string, error) {
-	if strings.HasPrefix(privateKeyHex, "0x") {
+	if strings.HasPrefix(
+		privateKeyHex,
+		"0x",
+	) {
 		privateKeyHex = privateKeyHex[2:]
 	}
 	keyBytes, err := hex.DecodeString(privateKeyHex)
@@ -113,12 +153,23 @@ func GonkaAddress(privateKeyHex string) (string, error) {
 	hasher := ripemd160.New()
 	hasher.Write(sha[:])
 	ripe := hasher.Sum(nil)
-	five, err := bech32.ConvertBits(ripe[:], 8, 5, true)
+	five, err := bech32.ConvertBits(
+		ripe[:],
+		8,
+		5,
+		true,
+	)
 	if err != nil {
 		return "", err
 	}
-	prefix := strings.Split(GonkaChainID, "-")[0]
-	return bech32.Encode(prefix, five)
+	prefix := strings.Split(
+		GonkaChainID,
+		"-",
+	)[0]
+	return bech32.Encode(
+		prefix,
+		five,
+	)
 }
 
 // SignatureComponents contains the components needed for signature generation
@@ -132,21 +183,40 @@ type SignatureComponents struct {
 func getSignatureBytes(components SignatureComponents) []byte {
 	// Create message payload by concatenating components
 	messagePayload := []byte(components.Payload)
-	if components.Timestamp > 0 {
-		messagePayload = append(messagePayload, []byte(strconv.FormatInt(components.Timestamp, 10))...)
-	}
-	messagePayload = append(messagePayload, []byte(components.TransferAddress)...)
+
+	sum := sha256.Sum256(messagePayload)
+	messagePayload = []byte(hex.EncodeToString(sum[:]))
+
+	messagePayload = append(
+		messagePayload,
+		[]byte(strconv.FormatInt(
+			components.Timestamp,
+			10,
+		))...,
+	)
+
+	messagePayload = append(
+		messagePayload,
+		[]byte(components.TransferAddress)...,
+	)
+
 	return messagePayload
 }
 
 // SignComponentsWithKey combines getSignatureBytes and GonkaSignature to create a signature
 // from SignatureComponents using the provided private key.
-func SignComponentsWithKey(components SignatureComponents, privateKeyHex string) (string, error) {
+func SignComponentsWithKey(
+	components SignatureComponents,
+	privateKeyHex string,
+) (string, error) {
 	// Get the bytes to sign from the components
 	dataToSign := getSignatureBytes(components)
 
 	// Sign the data with the private key
-	return GonkaSignature(dataToSign, privateKeyHex)
+	return GonkaSignature(
+		dataToSign,
+		privateKeyHex,
+	)
 }
 
 type signingRoundTripper struct {
@@ -156,7 +226,10 @@ type signingRoundTripper struct {
 	endpoints  []Endpoint
 }
 
-func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (s signingRoundTripper) RoundTrip(req *http.Request) (
+	*http.Response,
+	error,
+) {
 	// Generate timestamp in nanoseconds
 	timestamp := time.Now().UnixNano()
 
@@ -169,7 +242,10 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 
 		// Find the matching endpoint
 		for _, endpoint := range s.endpoints {
-			if strings.HasPrefix(endpoint.URL, baseURL) {
+			if strings.HasPrefix(
+				endpoint.URL,
+				baseURL,
+			) {
 				transferAddress = endpoint.Address
 				break
 			}
@@ -177,7 +253,10 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 
 		// If no matching endpoint found, we can't proceed
 		if transferAddress == "" {
-			return nil, fmt.Errorf("no transfer address found for endpoint: %s", baseURL)
+			return nil, fmt.Errorf(
+				"no transfer address found for endpoint: %s",
+				baseURL,
+			)
 		}
 	} else {
 		return nil, fmt.Errorf("request URL is nil")
@@ -195,9 +274,15 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 				TransferAddress: transferAddress,
 			}
 
-			sig, err := SignComponentsWithKey(components, s.privateKey)
+			sig, err := SignComponentsWithKey(
+				components,
+				s.privateKey,
+			)
 			if err == nil {
-				req.Header.Set("Authorization", sig)
+				req.Header.Set(
+					"Authorization",
+					sig,
+				)
 			}
 		}
 		req.Body = io.NopCloser(bytes.NewReader(data))
@@ -208,15 +293,30 @@ func (s signingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error
 			TransferAddress: transferAddress,
 		}
 
-		sig, err := SignComponentsWithKey(components, s.privateKey)
+		sig, err := SignComponentsWithKey(
+			components,
+			s.privateKey,
+		)
 		if err == nil {
-			req.Header.Set("Authorization", sig)
+			req.Header.Set(
+				"Authorization",
+				sig,
+			)
 		}
 	}
 
 	// Set headers
-	req.Header.Set("X-Requester-Address", s.address)
-	req.Header.Set("X-Timestamp", strconv.FormatInt(timestamp, 10))
+	req.Header.Set(
+		"X-Requester-Address",
+		s.address,
+	)
+	req.Header.Set(
+		"X-Timestamp",
+		strconv.FormatInt(
+			timestamp,
+			10,
+		),
+	)
 
 	return s.rt.RoundTrip(req)
 }
@@ -246,14 +346,24 @@ func GonkaHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	if opts.SourceUrl != "" {
 		// SourceUrl takes precedence over Endpoints
 		var err error
-		endpoints, err = GetParticipantsWithProof(context.Background(), opts.SourceUrl, "current")
+		endpoints, err = GetParticipantsWithProof(
+			context.Background(),
+			opts.SourceUrl,
+			"current",
+		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get participants with proof: %w", err)
+			return nil, fmt.Errorf(
+				"failed to get participants with proof: %w",
+				err,
+			)
 		}
 
 		// Ensure we got at least one endpoint
 		if len(endpoints) == 0 {
-			return nil, fmt.Errorf("no endpoints found from SourceUrl: %s", opts.SourceUrl)
+			return nil, fmt.Errorf(
+				"no endpoints found from SourceUrl: %s",
+				opts.SourceUrl,
+			)
 		}
 	}
 
@@ -265,7 +375,10 @@ func GonkaHTTPClient(opts HTTPClientOptions) (*http.Client, error) {
 	// Validate that each endpoint has a non-empty address
 	for _, endpoint := range endpoints {
 		if endpoint.Address == "" {
-			return nil, fmt.Errorf("endpoint %s has an empty address, all endpoints must have an address", endpoint.URL)
+			return nil, fmt.Errorf(
+				"endpoint %s has an empty address, all endpoints must have an address",
+				endpoint.URL,
+			)
 		}
 	}
 
