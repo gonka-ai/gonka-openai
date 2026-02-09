@@ -8,10 +8,8 @@ from typing import Dict, List, Optional, Any, Union
 from openai import OpenAI
 
 from .utils import gonka_base_url, gonka_address as utils_gonka_address, custom_endpoint_selection, gonka_http_client, \
-    Endpoint
+    Endpoint, resolve_endpoints
 from .constants import ENV, GONKA_CHAIN_ID
-from .utils import get_endpoints_from_env_or_default
-from .get_participants_with_proof import get_participants_with_proof
 
 class GonkaOpenAI(OpenAI):
     """
@@ -30,12 +28,13 @@ class GonkaOpenAI(OpenAI):
     ):
         """
         Initialize the GonkaOpenAI client.
-        
+
         Args:
             gonka_private_key: ECDSA private key for signing requests
             gonka_address: Optional Cosmos address to use instead of deriving from private key
             endpoints: Optional list of Gonka network endpoints to use
             endpoint_selection_strategy: Optional strategy for selecting from available endpoints
+            source_url: Optional source URL for participants discovery
             **kwargs: Additional arguments to pass to the base OpenAI client
         """
         # Get private key from arguments or environment
@@ -44,43 +43,22 @@ class GonkaOpenAI(OpenAI):
             raise ValueError(
                 f"Private key must be provided either as argument or through {ENV.PRIVATE_KEY} environment variable"
             )
-        
-        # Determine endpoints per priority:
-        # 1) source_url arg or env -> try fetch participants with proof
-        # 2) if none, use provided endpoints arg
-        # 3) if none, parse endpoints from env (GONKA_ENDPOINTS)
+
+        # Resolve endpoints with filtering by allowed_transfer_addresses and delegate_ta preference
         src_url = source_url or os.environ.get(ENV.SOURCE_URL)
-        resolved_endpoints: List[Endpoint] = []
-        if src_url:
-            try:
-                eps = get_participants_with_proof(src_url, "current")
-                if eps:
-                    resolved_endpoints = eps
-            except Exception:
-                pass
-        if not resolved_endpoints and endpoints:
-            resolved_endpoints = endpoints
-        if not resolved_endpoints:
-            env_eps = os.environ.get(ENV.ENDPOINTS)
-            if env_eps:
-                try:
-                    resolved_endpoints = [Endpoint.parse(e.strip()) for e in env_eps.split(',') if e.strip()]
-                except Exception:
-                    resolved_endpoints = []
+        resolved_endpoints = resolve_endpoints(
+            source_url=src_url,
+            endpoints=endpoints,
+        )
 
         # Determine the base URL
         if endpoint_selection_strategy:
-            # Use custom endpoint selection strategy if provided
             base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, resolved_endpoints)
         else:
-            # Default to random endpoint selection
             base_endpoint = gonka_base_url(resolved_endpoints)
         
         # Save the private key for later use
         self._private_key = private_key
-        # Reserved for future behavior parity with Go Options.SourceUrl
-        self._source_url = source_url
-        
         # Get or derive the Gonka address
         address_param = gonka_address
         self._gonka_address = address_param or os.environ.get(ENV.ADDRESS)

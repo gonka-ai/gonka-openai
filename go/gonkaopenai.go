@@ -49,7 +49,7 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	// Determine endpoints per priority:
 	// 1) SourceUrl in opts or env -> try fetch participants
 	// 2) If no endpoints from SourceUrl, use opts.Endpoints
-	// 3) If still none, try env GONKA_ENDPOINTS (via utils not available here; expect caller to provide)
+	// 3) If still none, try env GONKA_ENDPOINTS
 	sourceUrl := opts.SourceUrl
 	if sourceUrl == "" {
 		sourceUrl = os.Getenv(EnvSourceUrl)
@@ -70,6 +70,53 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	}
 	if len(endpoints) == 0 {
 		return nil, fmt.Errorf("no endpoints resolved from SourceUrl, Options.Endpoints, or %s", EnvEndpoints)
+	}
+
+	// Fetch allowed_transfer_addresses once (used for both regular and delegate filtering)
+	var allowedSet map[string]bool
+	if sourceUrl != "" {
+		allowed, err := FetchAllowedTransferAddresses(context.Background(), sourceUrl)
+		if err == nil && len(allowed) > 0 {
+			allowedSet = make(map[string]bool, len(allowed))
+			for _, a := range allowed {
+				allowedSet[a] = true
+			}
+			var filtered []Endpoint
+			for _, ep := range endpoints {
+				if allowedSet[ep.Address] {
+					filtered = append(filtered, ep)
+				}
+			}
+			if len(filtered) > 0 {
+				endpoints = filtered
+			}
+		}
+	}
+
+	// Check for delegate_ta from source node identity (preferred over regular endpoints)
+	if sourceUrl != "" {
+		identity, err := FetchNodeIdentity(context.Background(), sourceUrl)
+		if err == nil && identity != nil && len(identity.DelegateTA) > 0 {
+			var delegateEndpoints []Endpoint
+			for url, addr := range identity.DelegateTA {
+				delegateEndpoints = append(delegateEndpoints, Endpoint{
+					URL:     ensureV1(url),
+					Address: addr,
+				})
+			}
+			if len(allowedSet) > 0 {
+				var filtered []Endpoint
+				for _, ep := range delegateEndpoints {
+					if allowedSet[ep.Address] {
+						filtered = append(filtered, ep)
+					}
+				}
+				delegateEndpoints = filtered
+			}
+			if len(delegateEndpoints) > 0 {
+				endpoints = delegateEndpoints
+			}
+		}
 	}
 
 	// Validate that each endpoint has a non-empty address

@@ -96,6 +96,45 @@ def get_endpoints_from_env_or_default() -> List[Endpoint]:
         return [Endpoint.parse(endpoint) for endpoint in DEFAULT_ENDPOINTS]
 
 
+def _ensure_v1(url: str) -> str:
+    if not url:
+        return url
+    u = url[:-1] if url.endswith('/') else url
+    return u if u.endswith('/v1') else f"{u}/v1"
+
+
+def fetch_allowed_transfer_addresses(node_url: str) -> List[str]:
+    """Fetch allowed transfer addresses from chain params via node's /chain-api/ proxy."""
+    base = node_url.rstrip('/')
+    if base.endswith('/v1'):
+        base = base[:-3]
+    url = f"{base}/chain-api/productscience/inference/inference/params"
+    try:
+        resp = httpx.get(url, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get('params', {}).get('transfer_agent_access_params', {}).get('allowed_transfer_addresses', [])
+    except Exception as e:
+        logger.error(f"Failed to fetch allowed transfer addresses: {e}")
+    return []
+
+
+def fetch_node_identity(node_url: str) -> dict:
+    """Fetch node identity including delegate_ta."""
+    base = node_url.rstrip('/')
+    if base.endswith('/v1'):
+        base = base[:-3]
+    url = f"{base}/v1/identity"
+    try:
+        resp = httpx.get(url, timeout=30)
+        if resp.status_code == 200:
+            data = resp.json()
+            return data.get('data', {})
+    except Exception as e:
+        logger.error(f"Failed to fetch node identity: {e}")
+    return {}
+
+
 def gonka_base_url(endpoints: Optional[List[Endpoint]] = None) -> Endpoint:
     """
     Get a random endpoint from the list of available endpoints.
@@ -118,6 +157,7 @@ def gonka_base_url(endpoints: Optional[List[Endpoint]] = None) -> Endpoint:
 def resolve_endpoints(source_url: Optional[str] = None, endpoints: Optional[List[Endpoint]] = None) -> List[Endpoint]:
     """
     Resolve endpoints using SourceUrl first, then provided list, then env/defaults.
+    Filters by allowed_transfer_addresses from chain params and prefers delegate_ta.
 
     Args:
         source_url: Optional SourceUrl for participants discovery
@@ -126,18 +166,47 @@ def resolve_endpoints(source_url: Optional[str] = None, endpoints: Optional[List
     Returns:
         List[Endpoint]
     """
-    if source_url:
+    src_url = source_url or os.environ.get(ENV.SOURCE_URL)
+
+    raw_endpoints: List[Endpoint] = []
+    if src_url:
         try:
-            # Local import to avoid circular dependency at module import time
             from .get_participants_with_proof import get_participants_with_proof  # type: ignore
-            eps = get_participants_with_proof(source_url, "current")
+            eps = get_participants_with_proof(src_url, "current")
             if eps:
-                return eps
-        except Exception:
-            pass
-    if endpoints:
-        return endpoints
-    return get_endpoints_from_env_or_default()
+                raw_endpoints = eps
+        except Exception as e:
+            logger.error(f"Failed to fetch participants from SourceUrl: {e}")
+    if not raw_endpoints and endpoints:
+        raw_endpoints = endpoints
+    if not raw_endpoints:
+        raw_endpoints = get_endpoints_from_env_or_default()
+
+    # Fetch allowed_transfer_addresses once (used for both regular and delegate filtering)
+    allowed_set: set = set()
+    if src_url:
+        allowed = fetch_allowed_transfer_addresses(src_url)
+        if allowed:
+            allowed_set = set(allowed)
+            filtered = [e for e in raw_endpoints if e.address in allowed_set]
+            if filtered:
+                raw_endpoints = filtered
+
+    # Check for delegate_ta from source node identity (preferred)
+    if src_url:
+        identity = fetch_node_identity(src_url)
+        delegate_ta = identity.get('delegate_ta', {})
+        if delegate_ta:
+            delegate_endpoints = [
+                Endpoint(url=_ensure_v1(url), address=address)
+                for url, address in delegate_ta.items()
+            ]
+            if allowed_set:
+                delegate_endpoints = [e for e in delegate_endpoints if e.address in allowed_set]
+            if delegate_endpoints:
+                return delegate_endpoints
+
+    return raw_endpoints
 
 
 def resolve_and_select_endpoint(source_url: Optional[str] = None,

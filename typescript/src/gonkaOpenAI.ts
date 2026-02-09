@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import { GonkaOpenAIOptions, SignatureComponents, GonkaEndpoint } from './types.js';
-import { customEndpointSelection, gonkaBaseURL, gonkaFetch, getNanoTimestamp } from './utils.js';
+import { customEndpointSelection, gonkaBaseURL, gonkaFetch, getNanoTimestamp, resolveEndpoints } from './utils.js';
 import { gonkaSignature as signatureFunction } from './utils.js';
 import { ENV } from './constants.js';
 
@@ -116,4 +116,21 @@ export class GonkaOpenAI extends OpenAI {
   get selectedEndpoint() {
     return this._selectedEndpoint;
   }
-} 
+
+  /**
+   * Async factory method that resolves endpoints with filtering by
+   * allowed_transfer_addresses and delegate_ta preference before constructing the client.
+   */
+  static async create(options: GonkaOpenAIOptions): Promise<GonkaOpenAI> {
+    const resolved = await resolveEndpoints({
+      sourceUrl: options.sourceUrl,
+      endpoints: options.endpoints,
+    });
+    return new GonkaOpenAI({
+      ...options,
+      endpoints: resolved,
+      // Clear sourceUrl so the constructor doesn't try to re-resolve
+      sourceUrl: undefined,
+    });
+  }
+}

@@ -43,6 +43,55 @@ export const gonkaBaseURL = (endpoints?: GonkaEndpoint[]): GonkaEndpoint => {
   return endpointList[randomIndex];
 };
 
+const ensureV1 = (u: string): string => {
+  if (!u) return u;
+  const noTrail = u.endsWith('/') ? u.slice(0, -1) : u;
+  return noTrail.endsWith('/v1') ? noTrail : `${noTrail}/v1`;
+};
+
+/**
+ * Fetch allowed transfer addresses via node's /chain-api/ proxy
+ */
+export const fetchAllowedTransferAddresses = async (nodeUrl: string): Promise<string[]> => {
+  let base = nodeUrl.replace(/\/+$/, '');
+  if (base.endsWith('/v1')) base = base.slice(0, -3);
+  const url = `${base}/chain-api/productscience/inference/inference/params`;
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) return [];
+    const data = await res.json() as any;
+    return data?.params?.transfer_agent_access_params?.allowed_transfer_addresses ?? [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * Node identity data including delegate_ta
+ */
+export interface NodeIdentity {
+  address?: string;
+  warm_key_address?: string;
+  delegate_ta?: Record<string, string>;
+}
+
+/**
+ * Fetch node identity including delegate_ta
+ */
+export const fetchNodeIdentity = async (nodeUrl: string): Promise<NodeIdentity> => {
+  let base = nodeUrl.replace(/\/+$/, '');
+  if (base.endsWith('/v1')) base = base.slice(0, -3);
+  const url = `${base}/v1/identity`;
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    if (!res.ok) return {};
+    const data = await res.json() as any;
+    return data?.data ?? {};
+  } catch {
+    return {};
+  }
+};
+
 /**
  * Fetch participants with proof and return endpoints (no ICS23 verification here)
  */
@@ -59,32 +108,69 @@ export const getParticipantsWithProof = async (sourceUrl: string, epoch: string)
 
 /**
  * Resolve endpoints via SourceUrl, provided list, or environment/defaults.
+ * Filters by allowed_transfer_addresses from chain params and prefers delegate_ta.
  */
 export const resolveEndpoints = async (opts: {
   sourceUrl?: string;
   endpoints?: GonkaEndpoint[];
   verifyProof?: boolean;
 }): Promise<GonkaEndpoint[]> => {
+  let rawEndpoints: GonkaEndpoint[] = [];
+
   const src = opts.sourceUrl || process.env['GONKA_SOURCE_URL'];
   if (src) {
-    const endpoints = await getParticipantsWithProof(src, 'current');
-    return endpoints;
+    try {
+      const eps = await getParticipantsWithProof(src, 'current');
+      if (eps.length) rawEndpoints = eps;
+    } catch { /* ignore */ }
   }
-  if (opts.endpoints && opts.endpoints.length) return opts.endpoints;
+  if (!rawEndpoints.length && opts.endpoints && opts.endpoints.length) {
+    rawEndpoints = opts.endpoints;
+  }
+  if (!rawEndpoints.length) {
+    const envEndpoints = process.env[ENV.ENDPOINTS];
+    if (envEndpoints) {
+      rawEndpoints = envEndpoints.split(',').map((e: string) => {
+        const parts = e.trim().split(';');
+        if (parts.length !== 2) {
+          throw new Error(`Invalid endpoint format: ${e}. Expected format: "url;transferAddress"`);
+        }
+        return { url: parts[0], transferAddress: parts[1] } as GonkaEndpoint;
+      });
+    } else {
+      rawEndpoints = DEFAULT_ENDPOINTS;
+    }
+  }
 
-  // Fall back to env or defaults
-  const envEndpoints = process.env[ENV.ENDPOINTS];
-  if (envEndpoints) {
-    const parsed = envEndpoints.split(',').map((e: string) => {
-      const parts = e.trim().split(';');
-      if (parts.length !== 2) {
-        throw new Error(`Invalid endpoint format: ${e}. Expected format: "url;transferAddress"`);
-      }
-      return { url: parts[0], transferAddress: parts[1] } as GonkaEndpoint;
-    });
-    return parsed;
+  // Fetch allowed_transfer_addresses once (used for both regular and delegate filtering)
+  let allowedSet: Set<string> | null = null;
+  if (src) {
+    const allowed = await fetchAllowedTransferAddresses(src);
+    if (allowed.length) {
+      allowedSet = new Set(allowed);
+      const filtered = rawEndpoints.filter(e => allowedSet!.has(e.transferAddress) || allowedSet!.has(e.address || ''));
+      if (filtered.length) rawEndpoints = filtered;
+    }
   }
-  return DEFAULT_ENDPOINTS;
+
+  // Check for delegate_ta from source node identity (preferred)
+  if (src) {
+    try {
+      const identity = await fetchNodeIdentity(src);
+      if (identity.delegate_ta && Object.keys(identity.delegate_ta).length) {
+        let delegateEndpoints: GonkaEndpoint[] = [];
+        for (const [url, addr] of Object.entries(identity.delegate_ta)) {
+          delegateEndpoints.push({ url: ensureV1(url), transferAddress: addr, address: addr });
+        }
+        if (allowedSet) {
+          delegateEndpoints = delegateEndpoints.filter(e => allowedSet!.has(e.transferAddress));
+        }
+        if (delegateEndpoints.length) return delegateEndpoints;
+      }
+    } catch { /* ignore */ }
+  }
+
+  return rawEndpoints;
 };
 
 /**
@@ -140,11 +226,6 @@ export const getParticipantsWithProofFromPayload = (payload: any, verify: boolea
   }
 
   const participants = payload?.active_participants?.participants ?? [];
-  const ensureV1 = (u: string): string => {
-    if (!u) return u;
-    const noTrail = u.endsWith('/') ? u.slice(0, -1) : u;
-    return noTrail.endsWith('/v1') ? noTrail : `${noTrail}/v1`;
-  };
   const endpoints: GonkaEndpoint[] = [];
   for (const p of participants) {
     if (p?.inference_url && p?.index) {

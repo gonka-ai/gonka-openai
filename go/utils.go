@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math/big"
@@ -22,6 +23,96 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"golang.org/x/crypto/ripemd160" //nolint:SA1019 // RIPEMD-160 is required for Cosmos address generation, standard despite deprecation.
 )
+
+// FetchAllowedTransferAddresses fetches the allowed transfer addresses via the node's /chain-api/ proxy.
+func FetchAllowedTransferAddresses(ctx context.Context, nodeUrl string) ([]string, error) {
+	base := strings.TrimRight(nodeUrl, "/")
+	if strings.HasSuffix(base, "/v1") {
+		base = base[:len(base)-3]
+	}
+	url := base + "/chain-api/productscience/inference/inference/params"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("chain params request failed with status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Params struct {
+			TransferAgentAccessParams struct {
+				AllowedTransferAddresses []string `json:"allowed_transfer_addresses"`
+			} `json:"transfer_agent_access_params"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+	return result.Params.TransferAgentAccessParams.AllowedTransferAddresses, nil
+}
+
+// NodeIdentity represents the identity data returned by a node's /v1/identity endpoint.
+type NodeIdentity struct {
+	Address        string            `json:"address"`
+	WarmKeyAddress string            `json:"warm_key_address"`
+	DelegateTA     map[string]string `json:"delegate_ta"`
+}
+
+// FetchNodeIdentity fetches the node identity including delegate_ta.
+func FetchNodeIdentity(ctx context.Context, nodeUrl string) (*NodeIdentity, error) {
+	base := strings.TrimRight(nodeUrl, "/")
+	if strings.HasSuffix(base, "/v1") {
+		base = base[:len(base)-3]
+	}
+	url := base + "/v1/identity"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("identity request failed with status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Data NodeIdentity `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, err
+	}
+	return &result.Data, nil
+}
+
+func ensureV1(url string) string {
+	if url == "" {
+		return url
+	}
+	u := strings.TrimRight(url, "/")
+	if strings.HasSuffix(u, "/v1") {
+		return u
+	}
+	return u + "/v1"
+}
 
 // CustomEndpointSelection allows providing custom strategy.
 func CustomEndpointSelection(f func([]Endpoint) string, endpoints []Endpoint) string {
