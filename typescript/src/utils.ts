@@ -203,7 +203,7 @@ import { SignatureComponents } from './types.js';
  */
 export const getSigBytes = (components: SignatureComponents): Uint8Array => {
   // Convert payload to bytes if needed
-  let payloadBytes;
+  let payloadBytes: Buffer;
   if (typeof components.payload === 'string') {
     payloadBytes = Buffer.from(components.payload);
   } else if (Buffer.isBuffer(components.payload)) {
@@ -214,21 +214,15 @@ export const getSigBytes = (components: SignatureComponents): Uint8Array => {
     // For objects or other types, stringify and convert to bytes
     payloadBytes = Buffer.from(JSON.stringify(components.payload));
   }
-  
-  // Convert timestamp to string and then to bytes
-  const timestampBytes = Buffer.from(components.timestamp.toString());
-  
-  // Convert transfer address to bytes
-  const transferAddressBytes = Buffer.from(components.transferAddress);
-  
-  // Concatenate all bytes
-  const messageBytes = Buffer.concat([
-    payloadBytes,
-    timestampBytes,
-    transferAddressBytes
-  ]);
-  
-  return messageBytes;
+
+  // Phase 3: Sign hash of payload instead of raw payload
+  const payloadHash = sha256(payloadBytes);
+  const payloadHashHex = Buffer.from(payloadHash).toString('hex');
+
+  // Build signature input: hash + timestamp + transfer_address
+  const signatureInput = payloadHashHex + components.timestamp.toString() + components.transferAddress;
+
+  return Buffer.from(signatureInput);
 };
 
 /**
