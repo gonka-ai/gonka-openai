@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Any, Union
 from openai import OpenAI
 
 from .utils import gonka_base_url, gonka_address as utils_gonka_address, custom_endpoint_selection, gonka_http_client, \
-    Endpoint, resolve_endpoints
+    Endpoint, resolve_endpoints, fetch_node_identity
 from .constants import ENV, GONKA_CHAIN_ID
 
 class GonkaOpenAI(OpenAI):
@@ -56,7 +56,14 @@ class GonkaOpenAI(OpenAI):
             base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, resolved_endpoints)
         else:
             base_endpoint = gonka_base_url(resolved_endpoints)
-        
+        delegate_ta = fetch_node_identity(base_endpoint.url)
+        if delegate_ta:
+            original_address = base_endpoint.address
+            if endpoint_selection_strategy:
+                base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, delegate_ta)
+            else:
+                base_endpoint = gonka_base_url(delegate_ta)
+            base_endpoint.address = original_address
         # Save the private key for later use
         self._private_key = private_key
         # Get or derive the Gonka address

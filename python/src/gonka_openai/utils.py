@@ -2,15 +2,15 @@
 Utility functions for the GonkaOpenAI library.
 """
 
-import os
-import json
-import random
-import hashlib
 import base64
+import hashlib
+import json
 import logging
+import os
+import random
 import time
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple, NamedTuple
 from dataclasses import dataclass
+from typing import Any, Callable, List, Optional, Tuple, Set
 
 # Initialize base values for hybrid timestamp generation
 _wall_base = time.time_ns()
@@ -32,13 +32,12 @@ def hybrid_timestamp_ns():
 # Import necessary libraries for OpenAI client
 from openai import DefaultHttpxClient
 import httpx
-from httpx import Response
 
 # Import cryptographic libraries
 import secp256k1
 import bech32
 # Add ecdsa library import for signature compatibility
-from ecdsa import SigningKey, SECP256k1, util
+from ecdsa import SigningKey, SECP256k1
 
 from .constants import ENV, DEFAULT_ENDPOINTS, GONKA_CHAIN_ID
 
@@ -103,7 +102,7 @@ def _ensure_v1(url: str) -> str:
     return u if u.endswith('/v1') else f"{u}/v1"
 
 
-def fetch_allowed_transfer_addresses(node_url: str) -> List[str]:
+def fetch_allowed_transfer_addresses(node_url: str) -> Set[str]:
     """Fetch allowed transfer addresses from chain params via node's /chain-api/ proxy."""
     base = node_url.rstrip('/')
     if base.endswith('/v1'):
@@ -111,15 +110,15 @@ def fetch_allowed_transfer_addresses(node_url: str) -> List[str]:
     url = f"{base}/chain-api/productscience/inference/inference/params"
     try:
         resp = httpx.get(url, timeout=30)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get('params', {}).get('transfer_agent_access_params', {}).get('allowed_transfer_addresses', [])
+        resp.raise_for_status()
+        data = resp.json()
+        return set(data.get('params', {}).get('transfer_agent_access_params', {}).get('allowed_transfer_addresses', []))
     except Exception as e:
         logger.error(f"Failed to fetch allowed transfer addresses: {e}")
-    return []
+    return set()
 
 
-def fetch_node_identity(node_url: str) -> dict:
+def fetch_node_identity(node_url: str) -> List[Endpoint]:
     """Fetch node identity including delegate_ta."""
     base = node_url.rstrip('/')
     if base.endswith('/v1'):
@@ -127,12 +126,13 @@ def fetch_node_identity(node_url: str) -> dict:
     url = f"{base}/v1/identity"
     try:
         resp = httpx.get(url, timeout=30)
-        if resp.status_code == 200:
-            data = resp.json()
-            return data.get('data', {})
+        resp.raise_for_status()
+        data = resp.json()
+        delegate_ta = data.get('data', {}).get('delegate_ta', {})
+        return [Endpoint(url=_ensure_v1(k), address=v) for k, v in delegate_ta.items()]
     except Exception as e:
         logger.error(f"Failed to fetch node identity: {e}")
-    return {}
+    return []
 
 
 def gonka_base_url(endpoints: Optional[List[Endpoint]] = None) -> Endpoint:
@@ -166,47 +166,17 @@ def resolve_endpoints(source_url: Optional[str] = None, endpoints: Optional[List
     Returns:
         List[Endpoint]
     """
-    src_url = source_url or os.environ.get(ENV.SOURCE_URL)
-
-    raw_endpoints: List[Endpoint] = []
-    if src_url:
+    eps = []
+    if source_url:
         try:
+            # Local import to avoid circular dependency at module import time
             from .get_participants_with_proof import get_participants_with_proof  # type: ignore
-            eps = get_participants_with_proof(src_url, "current")
-            if eps:
-                raw_endpoints = eps
+            eps = get_participants_with_proof(source_url, "current")
         except Exception as e:
-            logger.error(f"Failed to fetch participants from SourceUrl: {e}")
-    if not raw_endpoints and endpoints:
-        raw_endpoints = endpoints
-    if not raw_endpoints:
-        raw_endpoints = get_endpoints_from_env_or_default()
-
-    # Fetch allowed_transfer_addresses once (used for both regular and delegate filtering)
-    allowed_set: set = set()
-    if src_url:
-        allowed = fetch_allowed_transfer_addresses(src_url)
-        if allowed:
-            allowed_set = set(allowed)
-            filtered = [e for e in raw_endpoints if e.address in allowed_set]
-            if filtered:
-                raw_endpoints = filtered
-
-    # Check for delegate_ta from source node identity (preferred)
-    if src_url:
-        identity = fetch_node_identity(src_url)
-        delegate_ta = identity.get('delegate_ta', {})
-        if delegate_ta:
-            delegate_endpoints = [
-                Endpoint(url=_ensure_v1(url), address=address)
-                for url, address in delegate_ta.items()
-            ]
-            if allowed_set:
-                delegate_endpoints = [e for e in delegate_endpoints if e.address in allowed_set]
-            if delegate_endpoints:
-                return delegate_endpoints
-
-    return raw_endpoints
+            logger.error(f"Got error fetching endpoints from SourceUrl {source_url}: {e}")
+    eps = eps or endpoints or get_endpoints_from_env_or_default()
+    allowed_transfer_addresses = fetch_allowed_transfer_addresses(source_url)
+    return [e for e in eps if e.address in allowed_transfer_addresses]
 
 
 def resolve_and_select_endpoint(source_url: Optional[str] = None,
@@ -297,7 +267,7 @@ def gonka_signature(body: Any, private_key_hex: str, timestamp: int, transfer_ad
     signature_input = payload_hash
     signature_input += str(timestamp)
     signature_input += transfer_address
-    
+    print(transfer_address, 'input')
     signature_bytes = signature_input.encode('utf-8')
 
     # Sign the message with deterministic ECDSA using our custom encoder
