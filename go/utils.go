@@ -25,7 +25,7 @@ import (
 )
 
 // FetchAllowedTransferAddresses fetches the allowed transfer addresses via the node's /chain-api/ proxy.
-func FetchAllowedTransferAddresses(ctx context.Context, nodeUrl string) ([]string, error) {
+func FetchAllowedTransferAddresses(ctx context.Context, nodeUrl string) (map[string]bool, error) {
 	base := strings.TrimRight(nodeUrl, "/")
 	if strings.HasSuffix(base, "/v1") {
 		base = base[:len(base)-3]
@@ -59,18 +59,15 @@ func FetchAllowedTransferAddresses(ctx context.Context, nodeUrl string) ([]strin
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, err
 	}
-	return result.Params.TransferAgentAccessParams.AllowedTransferAddresses, nil
+	set := make(map[string]bool, len(result.Params.TransferAgentAccessParams.AllowedTransferAddresses))
+	for _, a := range result.Params.TransferAgentAccessParams.AllowedTransferAddresses {
+		set[a] = true
+	}
+	return set, nil
 }
 
-// NodeIdentity represents the identity data returned by a node's /v1/identity endpoint.
-type NodeIdentity struct {
-	Address        string            `json:"address"`
-	WarmKeyAddress string            `json:"warm_key_address"`
-	DelegateTA     map[string]string `json:"delegate_ta"`
-}
-
-// FetchNodeIdentity fetches the node identity including delegate_ta.
-func FetchNodeIdentity(ctx context.Context, nodeUrl string) (*NodeIdentity, error) {
+// FetchNodeIdentity fetches the node identity including delegate_ta, returning endpoints.
+func FetchNodeIdentity(ctx context.Context, nodeUrl string) ([]Endpoint, error) {
 	base := strings.TrimRight(nodeUrl, "/")
 	if strings.HasSuffix(base, "/v1") {
 		base = base[:len(base)-3]
@@ -95,12 +92,21 @@ func FetchNodeIdentity(ctx context.Context, nodeUrl string) (*NodeIdentity, erro
 		return nil, err
 	}
 	var result struct {
-		Data NodeIdentity `json:"data"`
+		Data struct {
+			DelegateTA map[string]string `json:"delegate_ta"`
+		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		return nil, err
 	}
-	return &result.Data, nil
+	var endpoints []Endpoint
+	for u, addr := range result.Data.DelegateTA {
+		endpoints = append(endpoints, Endpoint{
+			URL:     ensureV1(u),
+			Address: addr,
+		})
+	}
+	return endpoints, nil
 }
 
 func ensureV1(url string) string {

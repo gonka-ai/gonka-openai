@@ -267,7 +267,6 @@ def gonka_signature(body: Any, private_key_hex: str, timestamp: int, transfer_ad
     signature_input = payload_hash
     signature_input += str(timestamp)
     signature_input += transfer_address
-    print(transfer_address, 'input')
     signature_bytes = signature_input.encode('utf-8')
 
     # Sign the message with deterministic ECDSA using our custom encoder

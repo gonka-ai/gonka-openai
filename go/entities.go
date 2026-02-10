@@ -5,6 +5,10 @@ import (
 	comettypes "github.com/cometbft/cometbft/types"
 )
 
+type ExcludedParticipant struct {
+	Address string `json:"address"`
+}
+
 type ActiveParticipantWithProof struct {
 	ActiveParticipants      ActiveParticipants    `json:"active_participants"`
 	Addresses               []string              `json:"addresses"`
@@ -12,6 +16,7 @@ type ActiveParticipantWithProof struct {
 	ProofOps                *cryptotypes.ProofOps `json:"proof_ops"`
 	Validators              []*Validator          `json:"validators"`
 	Block                   *comettypes.Block     `json:"block"`
+	ExcludedParticipants    []ExcludedParticipant `json:"excluded_participants"`
 }
 
 type Validator struct {

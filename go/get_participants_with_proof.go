@@ -64,6 +64,16 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 
 	verify := os.Getenv("GONKA_VERIFY_PROOF") == "1"
 
+	// Parse excluded_participants
+	var excludedRaw struct {
+		ExcludedParticipants []ExcludedParticipant `json:"excluded_participants"`
+	}
+	_ = json.Unmarshal(bodyBytes, &excludedRaw)
+	excludedSet := make(map[string]bool, len(excludedRaw.ExcludedParticipants))
+	for _, ep := range excludedRaw.ExcludedParticipants {
+		excludedSet[ep.Address] = true
+	}
+
 	var endpoints []Endpoint
 	if verify {
 		// Full decode with verification
@@ -87,9 +97,11 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 		// Map to endpoints
 		endpoints = make([]Endpoint, 0, len(participantResp.ActiveParticipants.Participants))
 		for _, participant := range participantResp.ActiveParticipants.Participants {
-			inferenceUrl := participant.InferenceUrl
+			if excludedSet[participant.Index] {
+				continue
+			}
 			endpoints = append(endpoints, Endpoint{
-				URL:     inferenceUrl + "/v1",
+				URL:     participant.InferenceUrl + "/v1",
 				Address: participant.Index,
 			})
 		}
@@ -103,9 +115,11 @@ func GetParticipantsWithProof(ctx context.Context, baseURL string, epoch string)
 		}
 		endpoints = make([]Endpoint, 0, len(light.ActiveParticipants.Participants))
 		for _, participant := range light.ActiveParticipants.Participants {
-			inferenceUrl := participant.InferenceUrl
+			if excludedSet[participant.Index] {
+				continue
+			}
 			endpoints = append(endpoints, Endpoint{
-				URL:     inferenceUrl + "/v1",
+				URL:     participant.InferenceUrl + "/v1",
 				Address: participant.Index,
 			})
 		}
