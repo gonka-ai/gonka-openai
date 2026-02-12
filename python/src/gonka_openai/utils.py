@@ -166,17 +166,25 @@ def resolve_endpoints(source_url: Optional[str] = None, endpoints: Optional[List
     Returns:
         List[Endpoint]
     """
-    eps = []
+    # If endpoints provided directly or from env, use them without filtering
+    if endpoints:
+        return endpoints
+    env_endpoints = get_endpoints_from_env_or_default()
+    if env_endpoints:
+        return env_endpoints
+    
+    # Only fetch from source_url and filter if no explicit endpoints provided
     if source_url:
         try:
             # Local import to avoid circular dependency at module import time
             from .get_participants_with_proof import get_participants_with_proof  # type: ignore
             eps = get_participants_with_proof(source_url, "current")
+            allowed_transfer_addresses = fetch_allowed_transfer_addresses(source_url)
+            return [e for e in eps if e.address in allowed_transfer_addresses]
         except Exception as e:
             logger.error(f"Got error fetching endpoints from SourceUrl {source_url}: {e}")
-    eps = eps or endpoints or get_endpoints_from_env_or_default()
-    allowed_transfer_addresses = fetch_allowed_transfer_addresses(source_url)
-    return [e for e in eps if e.address in allowed_transfer_addresses]
+    
+    return []
 
 
 def resolve_and_select_endpoint(source_url: Optional[str] = None,
@@ -356,11 +364,11 @@ def gonka_http_client(
     # Derive address if not provided
     resolved_address = address or gonka_address(private_key)
     
-    # Get the endpoint with transfer address
-    endpoint = gonka_base_url()
-    
-    # Use provided transfer address or get it from the endpoint
-    resolved_transfer_address = transfer_address or endpoint.address
+    # Use provided transfer address or get it from a random endpoint
+    resolved_transfer_address = transfer_address
+    if not resolved_transfer_address:
+        endpoint = gonka_base_url()
+        resolved_transfer_address = endpoint.address
     
     # Validate that we have a transfer address
     if not resolved_transfer_address:

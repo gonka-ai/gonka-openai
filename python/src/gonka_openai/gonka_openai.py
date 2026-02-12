@@ -56,14 +56,17 @@ class GonkaOpenAI(OpenAI):
             base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, resolved_endpoints)
         else:
             base_endpoint = gonka_base_url(resolved_endpoints)
-        delegate_ta = fetch_node_identity(base_endpoint.url)
-        if delegate_ta:
-            original_address = base_endpoint.address
-            if endpoint_selection_strategy:
-                base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, delegate_ta)
-            else:
-                base_endpoint = gonka_base_url(delegate_ta)
-            base_endpoint.address = original_address
+        
+        # Only fetch identity/delegate_ta if endpoints were not explicitly provided
+        if not endpoints:
+            delegate_ta = fetch_node_identity(base_endpoint.url)
+            if delegate_ta:
+                original_address = base_endpoint.address
+                if endpoint_selection_strategy:
+                    base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, delegate_ta)
+                else:
+                    base_endpoint = gonka_base_url(delegate_ta)
+                base_endpoint.address = original_address
         # Save the private key for later use
         self._private_key = private_key
         # Get or derive the Gonka address
