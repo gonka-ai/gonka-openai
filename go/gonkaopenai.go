@@ -47,40 +47,59 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	}
 
 	// Determine endpoints per priority:
-	// 1) SourceUrl in opts or env -> try fetch participants
-	// 2) If no endpoints from SourceUrl, use opts.Endpoints
-	// 3) If still none, try env GONKA_ENDPOINTS
-	sourceUrl := opts.SourceUrl
-	if sourceUrl == "" {
-		sourceUrl = os.Getenv(EnvSourceUrl)
-	}
+	// 1) If opts.Endpoints provided -> use them directly (no filtering/identity)
+	// 2) If env GONKA_ENDPOINTS set -> use them directly (no filtering/identity)
+	// 3) SourceUrl in opts or env -> fetch participants, filter, and check identity
 
 	var endpoints []Endpoint
-	if sourceUrl != "" {
-		eps, err := GetParticipantsWithProof(context.Background(), sourceUrl, "current")
-		if err == nil && len(eps) > 0 {
-			endpoints = eps
-		}
-	}
-	if len(endpoints) == 0 && len(opts.Endpoints) > 0 {
+	var skipFilteringAndIdentity bool
+
+	// Check for explicitly provided endpoints first
+	if len(opts.Endpoints) > 0 {
 		endpoints = opts.Endpoints
-	}
-	if len(endpoints) == 0 {
-		endpoints = GetEndpointsFromEnv()
-	}
-	if len(endpoints) == 0 {
-		return nil, fmt.Errorf("no endpoints resolved from SourceUrl, Options.Endpoints, or %s", EnvEndpoints)
+		skipFilteringAndIdentity = true
 	}
 
-	// Filter by allowed_transfer_addresses
-	allowed, _ := FetchAllowedTransferAddresses(context.Background(), sourceUrl)
-	var filteredEndpoints []Endpoint
-	for _, ep := range endpoints {
-		if allowed[ep.Address] {
-			filteredEndpoints = append(filteredEndpoints, ep)
+	// Check env endpoints if no explicit endpoints
+	if len(endpoints) == 0 {
+		envEndpoints := GetEndpointsFromEnv()
+		if len(envEndpoints) > 0 {
+			endpoints = envEndpoints
+			skipFilteringAndIdentity = true
 		}
 	}
-	endpoints = filteredEndpoints
+
+	// Only use sourceUrl if no explicit endpoints
+	sourceUrl := ""
+	if len(endpoints) == 0 {
+		sourceUrl = opts.SourceUrl
+		if sourceUrl == "" {
+			sourceUrl = os.Getenv(EnvSourceUrl)
+		}
+		if sourceUrl != "" {
+			eps, err := GetParticipantsWithProof(context.Background(), sourceUrl, "current")
+			if err == nil && len(eps) > 0 {
+				endpoints = eps
+			}
+		}
+	}
+
+	if len(endpoints) == 0 {
+		return nil, fmt.Errorf("no endpoints resolved from Options.Endpoints, %s, or SourceUrl", EnvEndpoints)
+	}
+
+	// Only filter and fetch identity when using sourceUrl (not explicit endpoints)
+	if !skipFilteringAndIdentity && sourceUrl != "" {
+		// Filter by allowed_transfer_addresses
+		allowed, _ := FetchAllowedTransferAddresses(context.Background(), sourceUrl)
+		var filteredEndpoints []Endpoint
+		for _, ep := range endpoints {
+			if allowed[ep.Address] {
+				filteredEndpoints = append(filteredEndpoints, ep)
+			}
+		}
+		endpoints = filteredEndpoints
+	}
 
 	// Validate that each endpoint has a non-empty address
 	for _, endpoint := range endpoints {
@@ -105,19 +124,21 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 		}
 	}
 
-	// Check for delegate_ta from the selected endpoint
-	delegateTa, err := FetchNodeIdentity(context.Background(), baseURL)
-	if err == nil && len(delegateTa) > 0 {
-		originalAddress := selectedAddress
-		if opts.EndpointSelectionStrategy != nil {
-			baseURL = CustomEndpointSelection(opts.EndpointSelectionStrategy, delegateTa)
-		} else {
-			baseURL = GonkaBaseURL(delegateTa)
+	// Only check for delegate_ta when using sourceUrl (not explicit endpoints)
+	if !skipFilteringAndIdentity {
+		delegateTa, err := FetchNodeIdentity(context.Background(), baseURL)
+		if err == nil && len(delegateTa) > 0 {
+			originalAddress := selectedAddress
+			if opts.EndpointSelectionStrategy != nil {
+				baseURL = CustomEndpointSelection(opts.EndpointSelectionStrategy, delegateTa)
+			} else {
+				baseURL = GonkaBaseURL(delegateTa)
+			}
+			for i := range delegateTa {
+				delegateTa[i].Address = originalAddress
+			}
+			endpoints = delegateTa
 		}
-		for i := range delegateTa {
-			delegateTa[i].Address = originalAddress
-		}
-		endpoints = delegateTa
 	}
 
 	address := opts.GonkaAddress

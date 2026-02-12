@@ -104,53 +104,57 @@ export const getParticipantsWithProof = async (sourceUrl: string, epoch: string)
 
 /**
  * Resolve endpoints via SourceUrl, provided list, or environment/defaults.
- * Filters by allowed_transfer_addresses from chain params and prefers delegate_ta.
+ * When endpoints are explicitly provided or from env, use them directly without filtering.
+ * Only filters by allowed_transfer_addresses and fetches delegate_ta when using sourceUrl.
  */
 export const resolveEndpoints = async (opts: {
   sourceUrl?: string;
   endpoints?: GonkaEndpoint[];
 }): Promise<GonkaEndpoint[]> => {
-  let eps: GonkaEndpoint[] = [];
+  // If endpoints provided directly, use them without filtering
+  if (opts.endpoints && opts.endpoints.length) {
+    return opts.endpoints;
+  }
+
+  // If env endpoints exist, use them without filtering
+  const envEndpoints = process.env[ENV.ENDPOINTS];
+  if (envEndpoints) {
+    return envEndpoints.split(',').map((e: string) => {
+      const parts = e.trim().split(';');
+      if (parts.length !== 2) {
+        throw new Error(`Invalid endpoint format: ${e}. Expected format: "url;transferAddress"`);
+      }
+      return { url: parts[0], transferAddress: parts[1] } as GonkaEndpoint;
+    });
+  }
+
+  // Only fetch from sourceUrl and filter if no explicit endpoints provided
   if (opts.sourceUrl) {
     try {
-      eps = await getParticipantsWithProof(opts.sourceUrl, 'current');
-    } catch { /* ignore */ }
-  }
-  if (!eps.length) {
-    if (opts.endpoints && opts.endpoints.length) {
-      eps = opts.endpoints;
-    } else {
-      const envEndpoints = process.env[ENV.ENDPOINTS];
-      if (envEndpoints) {
-        eps = envEndpoints.split(',').map((e: string) => {
-          const parts = e.trim().split(';');
-          if (parts.length !== 2) {
-            throw new Error(`Invalid endpoint format: ${e}. Expected format: "url;transferAddress"`);
-          }
-          return { url: parts[0], transferAddress: parts[1] } as GonkaEndpoint;
-        });
-      } else {
-        eps = DEFAULT_ENDPOINTS;
+      let eps = await getParticipantsWithProof(opts.sourceUrl, 'current');
+      const allowedTransferAddresses = await fetchAllowedTransferAddresses(opts.sourceUrl);
+      eps = eps.filter(e => allowedTransferAddresses.has(e.transferAddress) || allowedTransferAddresses.has(e.address || ''));
+
+      // Check for delegate_ta from a resolved endpoint
+      if (eps.length > 0) {
+        const probe = gonkaBaseURL(eps);
+        const delegateTa = await fetchNodeIdentity(probe.url);
+        if (delegateTa.length > 0) {
+          const originalAddress = probe.address || probe.transferAddress;
+          const selected = gonkaBaseURL(delegateTa);
+          selected.address = originalAddress;
+          selected.transferAddress = originalAddress;
+          return [selected];
+        }
       }
-    }
-  }
-  const allowedTransferAddresses = await fetchAllowedTransferAddresses(opts.sourceUrl as string);
-  eps = eps.filter(e => allowedTransferAddresses.has(e.transferAddress) || allowedTransferAddresses.has(e.address || ''));
-
-  // Check for delegate_ta from a resolved endpoint
-  if (eps.length > 0) {
-    const probe = gonkaBaseURL(eps);
-    const delegateTa = await fetchNodeIdentity(probe.url);
-    if (delegateTa.length > 0) {
-      const originalAddress = probe.address || probe.transferAddress;
-      const selected = gonkaBaseURL(delegateTa);
-      selected.address = originalAddress;
-      selected.transferAddress = originalAddress;
-      return [selected];
+      return eps;
+    } catch (e) {
+      console.error(`Error fetching endpoints from sourceUrl ${opts.sourceUrl}:`, e);
     }
   }
 
-  return eps;
+  // Fallback to defaults
+  return DEFAULT_ENDPOINTS;
 };
 
 /**
