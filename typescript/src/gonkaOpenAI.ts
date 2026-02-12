@@ -45,15 +45,16 @@ export class GonkaOpenAI extends OpenAI {
       selectedEndpoint = gonkaBaseURL(resolvedEndpoints);
     }
 
+    // Normalize endpoint: ensure both address and transferAddress are set
+    if (!selectedEndpoint.transferAddress) selectedEndpoint.transferAddress = selectedEndpoint.address;
+    if (!selectedEndpoint.address) selectedEndpoint.address = selectedEndpoint.transferAddress;
+
     // Create the signing fetch function
     const signingFetch = gonkaFetch({
       gonkaPrivateKey: privateKey,
       gonkaAddress: options.gonkaAddress || process.env[ENV.ADDRESS],
       selectedEndpoint: selectedEndpoint,
     });
-
-    // Normalize endpoint alias for consistency
-    if (!selectedEndpoint.address) selectedEndpoint.address = selectedEndpoint.transferAddress;
 
     // Create the OpenAI configuration object
     const openAIConfig = {
@@ -98,7 +99,7 @@ export class GonkaOpenAI extends OpenAI {
     const timestamp = getNanoTimestamp();
     
     // Use the provided transfer address or the selected endpoint's address
-    const address = transferAddress || this._selectedEndpoint.address || this._selectedEndpoint.transferAddress;
+    const address = transferAddress || this._selectedEndpoint.address || this._selectedEndpoint.transferAddress || '';
     
     // Create signature components
     const components: SignatureComponents = {

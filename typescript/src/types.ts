@@ -14,7 +14,7 @@ export interface GonkaEndpoint {
   /**
    * Provider's gonka address (used for signing)
    */
-  transferAddress: string;
+  transferAddress?: string;
 
   /**
    * Alias for provider address (same value as transferAddress)

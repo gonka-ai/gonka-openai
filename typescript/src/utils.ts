@@ -133,7 +133,7 @@ export const resolveEndpoints = async (opts: {
     try {
       let eps = await getParticipantsWithProof(opts.sourceUrl, 'current');
       const allowedTransferAddresses = await fetchAllowedTransferAddresses(opts.sourceUrl);
-      eps = eps.filter(e => allowedTransferAddresses.has(e.transferAddress) || allowedTransferAddresses.has(e.address || ''));
+      eps = eps.filter(e => allowedTransferAddresses.has(e.transferAddress || '') || allowedTransferAddresses.has(e.address || ''));
 
       // Check for delegate_ta from a resolved endpoint
       if (eps.length > 0) {
@@ -498,7 +498,7 @@ export const gonkaFetch = (
         const components: SignatureComponents = {
           payload: requestInit.body,
           timestamp: timestamp,
-          transferAddress: selectedEndpoint.transferAddress
+          transferAddress: selectedEndpoint.transferAddress || selectedEndpoint.address || ''
         };
 
         // Sign the components
