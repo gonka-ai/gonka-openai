@@ -24,6 +24,7 @@ class GonkaOpenAI(OpenAI):
         endpoints: Optional[List[Endpoint]] = None,
         endpoint_selection_strategy: Optional[callable] = None,
         source_url: Optional[str] = None,
+        ta_endpoint: Optional[Endpoint] = None,
         **kwargs
     ):
         """
@@ -35,6 +36,7 @@ class GonkaOpenAI(OpenAI):
             endpoints: Optional list of Gonka network endpoints to use
             endpoint_selection_strategy: Optional strategy for selecting from available endpoints
             source_url: Optional source URL for participants discovery
+            ta_endpoint: Optional manually specified Transfer Agent endpoint (skips dynamic TA selection)
             **kwargs: Additional arguments to pass to the base OpenAI client
         """
         # Get private key from arguments or environment
@@ -44,26 +46,30 @@ class GonkaOpenAI(OpenAI):
                 f"Private key must be provided either as argument or through {ENV.PRIVATE_KEY} environment variable"
             )
 
-        # Resolve endpoints with filtering by allowed_transfer_addresses and delegate_ta preference
-        src_url = source_url or os.environ.get(ENV.SOURCE_URL)
-        resolved_endpoints = resolve_endpoints(
-            source_url=src_url,
-            endpoints=endpoints,
-        )
-
-        # Determine the base URL
-        if endpoint_selection_strategy:
-            base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, resolved_endpoints)
+        # Use manually specified TA endpoint if provided, otherwise resolve dynamically
+        if ta_endpoint is not None:
+            base_endpoint = ta_endpoint
         else:
-            base_endpoint = gonka_base_url(resolved_endpoints)
-        delegate_ta = fetch_node_identity(base_endpoint.url)
-        if delegate_ta:
-            original_address = base_endpoint.address
+            # Resolve endpoints with filtering by allowed_transfer_addresses and delegate_ta preference
+            src_url = source_url or os.environ.get(ENV.SOURCE_URL)
+            resolved_endpoints = resolve_endpoints(
+                source_url=src_url,
+                endpoints=endpoints,
+            )
+
+            # Determine the base URL
             if endpoint_selection_strategy:
-                base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, delegate_ta)
+                base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, resolved_endpoints)
             else:
-                base_endpoint = gonka_base_url(delegate_ta)
-            base_endpoint.address = original_address
+                base_endpoint = gonka_base_url(resolved_endpoints)
+            delegate_ta = fetch_node_identity(base_endpoint.url)
+            if delegate_ta:
+                original_address = base_endpoint.address
+                if endpoint_selection_strategy:
+                    base_endpoint = custom_endpoint_selection(endpoint_selection_strategy, delegate_ta)
+                else:
+                    base_endpoint = gonka_base_url(delegate_ta)
+                base_endpoint.address = original_address
         # Save the private key for later use
         self._private_key = private_key
         # Get or derive the Gonka address
