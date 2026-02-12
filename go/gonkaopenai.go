@@ -49,7 +49,7 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 	// Determine endpoints per priority:
 	// 1) SourceUrl in opts or env -> try fetch participants
 	// 2) If no endpoints from SourceUrl, use opts.Endpoints
-	// 3) If still none, try env GONKA_ENDPOINTS (via utils not available here; expect caller to provide)
+	// 3) If still none, try env GONKA_ENDPOINTS
 	sourceUrl := opts.SourceUrl
 	if sourceUrl == "" {
 		sourceUrl = os.Getenv(EnvSourceUrl)
@@ -72,6 +72,16 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 		return nil, fmt.Errorf("no endpoints resolved from SourceUrl, Options.Endpoints, or %s", EnvEndpoints)
 	}
 
+	// Filter by allowed_transfer_addresses
+	allowed, _ := FetchAllowedTransferAddresses(context.Background(), sourceUrl)
+	var filteredEndpoints []Endpoint
+	for _, ep := range endpoints {
+		if allowed[ep.Address] {
+			filteredEndpoints = append(filteredEndpoints, ep)
+		}
+	}
+	endpoints = filteredEndpoints
+
 	// Validate that each endpoint has a non-empty address
 	for _, endpoint := range endpoints {
 		if endpoint.Address == "" {
@@ -84,6 +94,30 @@ func NewGonkaOpenAI(opts Options) (*GonkaOpenAI, error) {
 		baseURL = CustomEndpointSelection(opts.EndpointSelectionStrategy, endpoints)
 	} else {
 		baseURL = GonkaBaseURL(endpoints)
+	}
+
+	// Find selected endpoint's address
+	var selectedAddress string
+	for _, ep := range endpoints {
+		if ep.URL == baseURL {
+			selectedAddress = ep.Address
+			break
+		}
+	}
+
+	// Check for delegate_ta from the selected endpoint
+	delegateTa, err := FetchNodeIdentity(context.Background(), baseURL)
+	if err == nil && len(delegateTa) > 0 {
+		originalAddress := selectedAddress
+		if opts.EndpointSelectionStrategy != nil {
+			baseURL = CustomEndpointSelection(opts.EndpointSelectionStrategy, delegateTa)
+		} else {
+			baseURL = GonkaBaseURL(delegateTa)
+		}
+		for i := range delegateTa {
+			delegateTa[i].Address = originalAddress
+		}
+		endpoints = delegateTa
 	}
 
 	address := opts.GonkaAddress

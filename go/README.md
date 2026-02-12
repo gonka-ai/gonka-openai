@@ -5,7 +5,7 @@ A Go library for using OpenAI's API through the Gonka network.
 ## Installation
 
 ```bash
-go get github.com/libermans/gonka-openai/go
+go get github.com/gonka-ai/gonka-openai/go
 ```
 
 ## Usage
@@ -56,7 +56,7 @@ import (
     "context"
     "github.com/openai/openai-go"
     "github.com/openai/openai-go/option"
-    gonkaopenai "github.com/libermans/gonka-openai/go"
+    gonkaopenai "github.com/gonka-ai/gonka-openai/go"
 )
 
 func main() {

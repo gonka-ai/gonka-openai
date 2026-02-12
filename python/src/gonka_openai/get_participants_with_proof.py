@@ -63,6 +63,7 @@ def get_participants_with_proof_from_file(file_path: str) -> List[Endpoint]:
 def _process_payload(payload: dict) -> List[Endpoint]:
     # Env toggle: if GONKA_VERIFY_PROOF=0, skip ICS23 verification and do light parsing
     verify = os.environ.get("GONKA_VERIFY_PROOF") == "1"
+    excluded_participants = set(p["address"] for p in payload["excluded_participants"])
 
     def _ensure_v1(url: str) -> str:
         if not url:
@@ -76,7 +77,7 @@ def _process_payload(payload: dict) -> List[Endpoint]:
         for p in participants:
             url = (p or {}).get("inference_url")
             addr = (p or {}).get("index")
-            if not url or not addr:
+            if not url or not addr or addr in excluded_participants:
                 continue
             endpoints.append(Endpoint(url=_ensure_v1(url), address=addr))
         return endpoints
@@ -102,7 +103,7 @@ def _process_payload(payload: dict) -> List[Endpoint]:
     # Map to endpoints
     endpoints: List[Endpoint] = []
     for participant in apwp.active_participants.participants:
-        if not participant or not participant.inference_url or not participant.index:
+        if not participant or not participant.inference_url or not participant.index or participant.index in excluded_participants:
             # Skip invalid entries silently
             continue
         endpoints.append(Endpoint(url=_ensure_v1(participant.inference_url), address=participant.index))

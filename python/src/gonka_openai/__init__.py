@@ -8,5 +8,7 @@ from .utils import (
     Endpoint,
     resolve_endpoints,
     resolve_and_select_endpoint,
+    fetch_allowed_transfer_addresses,
+    fetch_node_identity,
 )
 from .constants import DEFAULT_ENDPOINTS
