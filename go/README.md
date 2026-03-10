@@ -19,7 +19,8 @@ package main
 
 import (
     "context"
-    gonkaopenai "github.com/libermans/gonka-openai/go"
+    gonkaopenai "github.com/gonka-ai/gonka-openai/go"
+    "github.com/openai/openai-go"
 )
 
 func main() {
@@ -34,7 +35,7 @@ func main() {
     }
 
     resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-        Model: "Qwen/QwQ-32B",
+        Model: "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
         Messages: []openai.ChatCompletionMessageParamUnion{
             openai.UserMessage("Hello!"),
         },
@@ -43,7 +44,7 @@ func main() {
         panic(err)
     }
 
-    println(chatCompletion.Choices[0].Message.Content)
+    println(resp.Choices[0].Message.Content)
 }
 ```
 
@@ -85,7 +86,7 @@ func main() {
     )
 
     chatCompletion, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
-        Model: "Qwen/QwQ-32B",
+        Model: "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
         Messages: []openai.ChatCompletionMessageParamUnion{
             openai.UserMessage("Hello!"),
         },
@@ -99,6 +100,70 @@ func main() {
 ```
 
 This approach provides the same dynamic request signing as Option 1, but gives you more direct control over the OpenAI client configuration.
+
+## Tool Calling
+
+Only `type: "function"` is supported — vLLM implements the OpenAI chat completions spec, not the Assistants API (`code_interpreter`, `file_search` are unavailable).
+
+Define functions and the model will return structured call arguments when the user's request matches. You decide what to do with them.
+
+```go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "log"
+    "os"
+
+    gonka "github.com/gonka-ai/gonka-openai/go"
+    "github.com/openai/openai-go"
+)
+
+func main() {
+    client, err := gonka.NewGonkaOpenAI(gonka.Options{
+        GonkaPrivateKey: os.Getenv("GONKA_PRIVATE_KEY"),
+        SourceUrl:       os.Getenv("NODE_URL"),
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
+        Model: "Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+        Messages: []openai.ChatCompletionMessageParamUnion{
+            openai.UserMessage("What's the weather in Paris?"),
+        },
+        Tools: []openai.ChatCompletionToolParam{
+            {
+                Type: "function",
+                Function: openai.FunctionDefinitionParam{
+                    Name:        "get_weather",
+                    Description: openai.String("Get the current weather for a city"),
+                    Parameters: openai.FunctionParameters{
+                        "type": "object",
+                        "properties": map[string]any{
+                            "city": map[string]string{"type": "string", "description": "City name"},
+                        },
+                        "required": []string{"city"},
+                    },
+                },
+            },
+        },
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    if len(resp.Choices[0].Message.ToolCalls) > 0 {
+        call := resp.Choices[0].Message.ToolCalls[0]
+        var args struct{ City string }
+        json.Unmarshal([]byte(call.Function.Arguments), &args)
+        // model chose get_weather with {City: "Paris"} — call your function now
+        log.Printf("Tool: %s, City: %s\n", call.Function.Name, args.City)
+    }
+}
+```
 
 ## Environment Variables
 
