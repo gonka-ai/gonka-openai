@@ -26,7 +26,7 @@ const client = new GonkaOpenAI({
 
 // Use exactly like the original OpenAI client
 const response = await client.chat.completions.create({
-  model: 'Qwen/QwQ-32B',
+  model: 'Qwen/Qwen3-235B-A22B-Instruct-2507-FP8',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```
@@ -54,12 +54,55 @@ const client = new OpenAI({
 
 // Use normally - all requests will be dynamically signed and routed through Gonka
 const response = await client.chat.completions.create({
-  model: 'Qwen/QwQ-32B',
+  model: 'Qwen/Qwen3-235B-A22B-Instruct-2507-FP8',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```
 
 This approach provides the same dynamic request signing as Option 1, but gives you more direct control over the OpenAI client configuration.
+
+## Tool Calling
+
+Only `type: "function"` is supported — vLLM implements the OpenAI chat completions spec, not the Assistants API (`code_interpreter`, `file_search` are unavailable).
+
+Define functions and the model will return structured call arguments when the user's request matches. You decide what to do with them.
+
+```typescript
+import { resolveEndpoints, GonkaOpenAI } from 'gonka-openai';
+
+const endpoints = await resolveEndpoints({ sourceUrl: 'https://gonka.example.com' });
+const client = new GonkaOpenAI({ gonkaPrivateKey: '0x1234...', endpoints });
+
+const tools = [
+  {
+    type: 'function',
+    function: {
+      name: 'get_weather',
+      description: 'Get the current weather for a city',
+      parameters: {
+        type: 'object',
+        properties: { city: { type: 'string', description: 'City name' } },
+        required: ['city'],
+      },
+    },
+  },
+];
+
+const response = await client.chat.completions.create({
+  model: 'Qwen/Qwen3-235B-A22B-Instruct-2507-FP8',
+  messages: [{ role: 'user', content: "What's the weather in Paris?" }],
+  tools,
+  tool_choice: 'auto',
+});
+
+const message = response.choices[0].message;
+if (message.tool_calls) {
+  const call = message.tool_calls[0];
+  const args = JSON.parse(call.function.arguments);
+  // model chose get_weather with { city: "Paris" } — call your function now
+  console.log(call.function.name, args);
+}
+```
 
 ## Environment Variables
 
@@ -86,7 +129,7 @@ const client = new GonkaOpenAI({ apiKey: 'mock-api-key', endpoints });
 
 // Use normally
 const response = await client.chat.completions.create({
-  model: 'Qwen/QwQ-32B',
+  model: 'Qwen/Qwen3-235B-A22B-Instruct-2507-FP8',
   messages: [{ role: 'user', content: 'Hello!' }],
 });
 ```

@@ -30,7 +30,7 @@ client = GonkaOpenAI(
 
 # Use exactly like the original OpenAI client
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
+    model="Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
     messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
 )
 ```
@@ -61,12 +61,58 @@ client = OpenAI(
 
 # Use normally - all requests will be dynamically signed and routed through Gonka
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
+    model="Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
     messages=[{"role": "user", "content": "What is the capital of France?"}],
 )
 ```
 
 This approach provides the same dynamic request signing as Option 1, but gives you more direct control over the OpenAI client configuration.
+
+## Tool Calling
+
+Only `type: "function"` is supported — vLLM implements the OpenAI chat completions spec, not the Assistants API (`code_interpreter`, `file_search` are unavailable).
+
+Define functions and the model will return structured call arguments when the user's request matches. You decide what to do with them.
+
+```python
+import json
+from gonka_openai import GonkaOpenAI
+
+client = GonkaOpenAI(
+    gonka_private_key="0x1234...",
+    source_url="https://api.gonka.testnet.example.com",
+)
+
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a city",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name"}
+                },
+                "required": ["city"],
+            },
+        },
+    }
+]
+
+response = client.chat.completions.create(
+    model="Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
+    messages=[{"role": "user", "content": "What's the weather in Paris?"}],
+    tools=tools,
+    tool_choice="auto",
+)
+
+message = response.choices[0].message
+if message.tool_calls:
+    call = message.tool_calls[0]
+    args = json.loads(call.function.arguments)
+    print(call.function.name, args)
+```
 
 ## Environment Variables
 
@@ -94,7 +140,7 @@ client = GonkaOpenAI(
 
 # Use normally
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
+    model="Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
     messages=[{"role": "user", "content": "Hello!"}],
 )
 ```
@@ -128,7 +174,7 @@ client = GonkaOpenAI(
 
 # Use normally
 response = client.chat.completions.create(
-    model="Qwen/QwQ-32B",
+    model="Qwen/Qwen3-235B-A22B-Instruct-2507-FP8",
     messages=[{"role": "user", "content": "Hello! Tell me a short joke."}],
 )
 ```
@@ -172,7 +218,6 @@ endpoints = get_participants_with_proof(
 for e in endpoints:
     print(e.url, e.address)
 ```
-3. **Dynamic Request Signing**: Using a custom HTTP client implementation to intercept and sign each request before it's sent
 
 ## Limitations
 
